@@ -28,8 +28,31 @@ MYHUMAN_URL = "https://apis.biodigital.com/services/v2/content/collections/myhum
 COLLECTIONS_URL = "https://apis.biodigital.com/services/v2/content/collections/mycollections"
 
 
+PLACEHOLDER_VALUES = {
+    "", "your_real_client_id", "your_newly_rotated_secret",
+    "your_client_id_here", "your_client_secret_here",
+    "paste_your_client_id_here", "paste_your_new_secret_here",
+    "...", "xxx",
+}
+
+
 def get_access_token(client_id: str, client_secret: str) -> str:
     """OAuth2 Client Credentials flow — returns a short-lived bearer token."""
+    # Guard against placeholder values — BioDigital returns an opaque 500
+    # for malformed credentials, so catch obvious mistakes up front.
+    if (client_id or "").strip() in PLACEHOLDER_VALUES:
+        raise SystemExit(
+            "ERROR: BIODIGITAL_CLIENT_ID is set to a placeholder value.\n"
+            "       Get your real Client ID from https://developer.biodigital.com\n"
+            "       (Dashboard → your app → API Credentials)."
+        )
+    if (client_secret or "").strip() in PLACEHOLDER_VALUES:
+        raise SystemExit(
+            "ERROR: BIODIGITAL_CLIENT_SECRET is set to a placeholder value.\n"
+            "       Get your real Client Secret from https://developer.biodigital.com\n"
+            "       (Dashboard → your app → API Credentials → Rotate/Show)."
+        )
+
     basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
     body = urllib.parse.urlencode({
         "grant_type": "client_credentials",
@@ -45,8 +68,23 @@ def get_access_token(client_id: str, client_secret: str) -> str:
         },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=15) as r:
-        data = json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode("utf-8", errors="replace")
+        hint = ""
+        if e.code in (400, 401, 500):
+            hint = (
+                "\n       Most likely causes:\n"
+                "       • Client ID or Client Secret is wrong (rotate a fresh one)\n"
+                "       • The Content API scope isn't enabled on your app\n"
+                "       • You pasted the Dev Key instead of the Client ID"
+            )
+        raise SystemExit(
+            f"ERROR: BioDigital token endpoint returned HTTP {e.code}.\n"
+            f"       Response body: {body_text[:300]}{hint}"
+        )
     if "access_token" not in data:
         raise RuntimeError(f"Token request failed: {data}")
     return data["access_token"]
