@@ -475,23 +475,29 @@ class JLVisionV10(QMainWindow):
 
     def _left_toolbar(self):
         w = QWidget()
-        w.setFixedWidth(64)
-        w.setStyleSheet('background: #080a10; border-right: 1px solid #1a2035;')
+        w.setFixedWidth(130)
+        w.setStyleSheet('background: #080a10; border-right: 2px solid #00ffd020;')
         col = QVBoxLayout(w)
-        col.setContentsMargins(8, 14, 8, 14)
-        col.setSpacing(8)
+        col.setContentsMargins(8, 16, 8, 16)
+        col.setSpacing(6)
         col.setAlignment(Qt.AlignTop)
 
+        # Section label
+        lbl = QLabel('TOOLS')
+        lbl.setStyleSheet('color: #445; font-size: 11px; font-weight: bold; letter-spacing: 2px;')
+        lbl.setAlignment(Qt.AlignCenter)
+        col.addWidget(lbl)
+        col.addSpacing(4)
+
         self._tool_btns = {}
-        for icon, name in [('Sel','Select'),('-','Line'),('/<','Angle'),
-                            ('O','Circle'),('.','Dot'),('->','Arrow'),
-                            ('T','Text'),('Drw','Draw'),('X','Erase')]:
-            btn = QPushButton(icon)
-            btn.setFixedSize(46, 46)
+        for name in ['Select', 'Line', 'Angle', 'Circle', 'Dot', 'Arrow', 'Text', 'Draw', 'Erase']:
+            btn = QPushButton(name)
+            btn.setFixedSize(114, 40)
             btn.setCheckable(True)
-            btn.setToolTip(name)
-            btn.setStyleSheet('QPushButton{font-size:14px;font-weight:bold;padding:0}'
-                              'QPushButton:checked{background:#00ffd0;color:#0d0f14}')
+            btn.setStyleSheet(
+                'QPushButton { font-size: 13px; font-weight: bold; text-align: left; padding-left: 12px; }'
+                'QPushButton:checked { background: #00ffd0; color: #0d0f14; }'
+            )
             col.addWidget(btn)
             self._tool_btns[name] = btn
 
@@ -499,9 +505,16 @@ class JLVisionV10(QMainWindow):
 
         col.addStretch()
 
-        self.btn_cal = QPushButton('Cal')
-        self.btn_cal.setFixedSize(46, 46)
-        self.btn_cal.setToolTip('Calibrate distance (2 clicks)')
+        # Divider
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setStyleSheet('color: #1a2035;')
+        col.addWidget(line)
+        col.addSpacing(4)
+
+        self.btn_cal = QPushButton('Calibrate')
+        self.btn_cal.setFixedSize(114, 40)
+        self.btn_cal.setToolTip('Click 2 points with known real-world distance')
         col.addWidget(self.btn_cal)
 
         return w
