@@ -153,31 +153,31 @@ def kp_xy(kps, name, w, h, thresh=0.15):
 STYLE = """
 * { font-family: "Segoe UI", Arial, sans-serif; }
 QMainWindow, QWidget { background: #0d0f14; color: #dde; }
-QLabel { color: #ccd; }
+QLabel { color: #ccd; font-size: 13px; }
 QPushButton {
     background: #131820; color: #00ffd0;
-    border: 1px solid #00ffd0; border-radius: 4px;
-    padding: 4px 10px; font-size: 12px;
+    border: 1px solid #00ffd0; border-radius: 5px;
+    padding: 5px 12px; font-size: 13px; font-weight: bold;
 }
 QPushButton:hover  { background: #00ffd0; color: #0d0f14; }
 QPushButton:pressed { background: #00b89a; }
 QPushButton:checked { background: #00ffd0; color: #0d0f14; }
 QPushButton:disabled { border-color: #333; color: #444; }
-QSlider::groove:horizontal { background: #1a1f2e; height: 4px; border-radius: 2px; }
+QSlider::groove:horizontal { background: #1a1f2e; height: 6px; border-radius: 3px; }
 QSlider::handle:horizontal {
-    background: #00ffd0; width: 14px; height: 14px;
-    margin: -5px 0; border-radius: 7px;
+    background: #00ffd0; width: 16px; height: 16px;
+    margin: -5px 0; border-radius: 8px;
 }
-QSlider::sub-page:horizontal { background: #00ffd0; border-radius: 2px; }
+QSlider::sub-page:horizontal { background: #00ffd0; border-radius: 3px; }
 QGroupBox {
-    border: 1px solid #222840; border-radius: 6px;
-    margin-top: 8px; padding-top: 8px;
-    font-size: 11px; color: #00ffd0; font-weight: bold;
+    border: 1px solid #222840; border-radius: 8px;
+    margin-top: 10px; padding-top: 10px;
+    font-size: 13px; color: #00ffd0; font-weight: bold;
 }
-QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }
+QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; }
 QTextEdit {
     background: #0a0c12; color: #aab; border: 1px solid #222840;
-    border-radius: 4px; padding: 4px; font-size: 12px;
+    border-radius: 4px; padding: 6px; font-size: 13px;
 }
 """
 
@@ -190,19 +190,19 @@ class MetricRow(QWidget):
     def __init__(self, label, parent=None):
         super().__init__(parent)
         row = QHBoxLayout(self)
-        row.setContentsMargins(4, 1, 4, 1)
+        row.setContentsMargins(6, 3, 6, 3)
         self._lbl = QLabel(label)
-        self._lbl.setStyleSheet('color: #6a7a8a; font-size: 11px;')
-        self._lbl.setFixedWidth(110)
+        self._lbl.setStyleSheet('color: #7a8a9a; font-size: 13px;')
+        self._lbl.setFixedWidth(130)
         self._val = QLabel('--')
-        self._val.setStyleSheet('color: #dde; font-size: 12px; font-weight: bold;')
+        self._val.setStyleSheet('color: #dde; font-size: 15px; font-weight: bold;')
         self._val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         row.addWidget(self._lbl)
         row.addWidget(self._val, 1)
 
     def set(self, text, color='#dde'):
         self._val.setText(str(text))
-        self._val.setStyleSheet(f'color: {color}; font-size: 12px; font-weight: bold;')
+        self._val.setStyleSheet(f'color: {color}; font-size: 15px; font-weight: bold;')
 
     def pending(self):
         self.set('pending', '#f5a623')
@@ -362,13 +362,13 @@ class JLVisionV10(QMainWindow):
 
     def _header(self):
         w = QWidget()
-        w.setFixedHeight(46)
-        w.setStyleSheet('background: #080a10; border-bottom: 1px solid #181e2e;')
+        w.setFixedHeight(58)
+        w.setStyleSheet('background: #080a10; border-bottom: 2px solid #00ffd020;')
         row = QHBoxLayout(w)
-        row.setContentsMargins(16, 0, 16, 0)
+        row.setContentsMargins(20, 0, 20, 0)
 
         title = QLabel('JL VISION   Coach Workspace  v10')
-        title.setStyleSheet('color: #00ffd0; font-size: 14px; font-weight: bold; letter-spacing: 1px;')
+        title.setStyleSheet('color: #00ffd0; font-size: 18px; font-weight: bold; letter-spacing: 2px;')
         row.addWidget(title)
         row.addStretch()
 
@@ -376,10 +376,10 @@ class JLVisionV10(QMainWindow):
         self.hdr_speed = QLabel('Speed: 1x')
         self.hdr_pose  = QLabel('Pose: -')
         for lbl in [self.hdr_frame, self.hdr_speed, self.hdr_pose]:
-            lbl.setStyleSheet('color: #778; font-size: 12px;')
+            lbl.setStyleSheet('color: #889; font-size: 14px;')
             row.addWidget(lbl)
             sep = QLabel('  |  ')
-            sep.setStyleSheet('color: #333;')
+            sep.setStyleSheet('color: #334; font-size: 14px;')
             row.addWidget(sep)
 
         return w
@@ -388,11 +388,11 @@ class JLVisionV10(QMainWindow):
 
     def _left_toolbar(self):
         w = QWidget()
-        w.setFixedWidth(52)
-        w.setStyleSheet('background: #080a10; border-right: 1px solid #181e2e;')
+        w.setFixedWidth(64)
+        w.setStyleSheet('background: #080a10; border-right: 1px solid #1a2035;')
         col = QVBoxLayout(w)
-        col.setContentsMargins(6, 12, 6, 12)
-        col.setSpacing(6)
+        col.setContentsMargins(8, 14, 8, 14)
+        col.setSpacing(8)
         col.setAlignment(Qt.AlignTop)
 
         self._tool_btns = {}
@@ -400,10 +400,10 @@ class JLVisionV10(QMainWindow):
                             ('O','Circle'),('.','Dot'),('->','Arrow'),
                             ('T','Text'),('Drw','Draw'),('X','Erase')]:
             btn = QPushButton(icon)
-            btn.setFixedSize(38, 38)
+            btn.setFixedSize(46, 46)
             btn.setCheckable(True)
             btn.setToolTip(name)
-            btn.setStyleSheet('QPushButton{font-size:15px;padding:0}'
+            btn.setStyleSheet('QPushButton{font-size:14px;font-weight:bold;padding:0}'
                               'QPushButton:checked{background:#00ffd0;color:#0d0f14}')
             col.addWidget(btn)
             self._tool_btns[name] = btn
@@ -413,7 +413,7 @@ class JLVisionV10(QMainWindow):
         col.addStretch()
 
         self.btn_cal = QPushButton('Cal')
-        self.btn_cal.setFixedSize(38, 38)
+        self.btn_cal.setFixedSize(46, 46)
         self.btn_cal.setToolTip('Calibrate distance (2 clicks)')
         col.addWidget(self.btn_cal)
 
@@ -423,21 +423,21 @@ class JLVisionV10(QMainWindow):
 
     def _controls(self):
         w = QWidget()
-        w.setFixedHeight(104)
-        w.setStyleSheet('background: #080a10; border-top: 1px solid #181e2e;')
+        w.setFixedHeight(120)
+        w.setStyleSheet('background: #080a10; border-top: 2px solid #00ffd020;')
         col = QVBoxLayout(w)
-        col.setContentsMargins(14, 6, 14, 6)
-        col.setSpacing(6)
+        col.setContentsMargins(16, 8, 16, 8)
+        col.setSpacing(8)
 
         # scrubber row
         scr_row = QHBoxLayout()
         self._lbl_pos = QLabel('0')
-        self._lbl_pos.setStyleSheet('color: #555; font-size: 11px; min-width: 32px;')
+        self._lbl_pos.setStyleSheet('color: #667; font-size: 13px; min-width: 40px;')
         self._lbl_pos.setAlignment(Qt.AlignRight)
         self.scrubber = QSlider(Qt.Horizontal)
         self.scrubber.setRange(0, max(self.total_frames - 1, 1))
         self._lbl_total = QLabel(str(self.total_frames))
-        self._lbl_total.setStyleSheet('color: #555; font-size: 11px; min-width: 40px;')
+        self._lbl_total.setStyleSheet('color: #667; font-size: 13px; min-width: 48px;')
         scr_row.addWidget(self._lbl_pos)
         scr_row.addWidget(self.scrubber, 1)
         scr_row.addWidget(self._lbl_total)
@@ -445,18 +445,19 @@ class JLVisionV10(QMainWindow):
 
         # button row
         btn_row = QHBoxLayout()
-        btn_row.setSpacing(6)
+        btn_row.setSpacing(8)
 
         self.btn_play  = QPushButton('> Play')
         self.btn_play.setCheckable(True)
-        self.btn_play.setFixedHeight(32)
+        self.btn_play.setFixedHeight(38)
+        self.btn_play.setMinimumWidth(90)
 
         self.btn_p10   = QPushButton('<< -10')
         self.btn_p1    = QPushButton('< -1')
         self.btn_n1    = QPushButton('+1 >')
         self.btn_n10   = QPushButton('+10 >>')
         for b in [self.btn_p10, self.btn_p1, self.btn_n1, self.btn_n10]:
-            b.setFixedHeight(32)
+            b.setFixedHeight(38)
 
         btn_row.addWidget(self.btn_p10)
         btn_row.addWidget(self.btn_p1)
@@ -467,12 +468,12 @@ class JLVisionV10(QMainWindow):
 
         # speed buttons
         spd_lbl = QLabel('Speed:')
-        spd_lbl.setStyleSheet('color: #666; font-size: 12px;')
+        spd_lbl.setStyleSheet('color: #778; font-size: 13px;')
         btn_row.addWidget(spd_lbl)
         self._spd_btns = {}
         for label, val in [('1x', 1.0), ('1/2x', 0.5), ('1/4x', 0.25), ('1/8x', 0.125)]:
             b = QPushButton(label)
-            b.setFixedSize(40, 32)
+            b.setFixedSize(52, 38)
             b.setCheckable(True)
             b.setChecked(val == 1.0)
             btn_row.addWidget(b)
@@ -484,16 +485,16 @@ class JLVisionV10(QMainWindow):
         self.btn_inference = QPushButton('Pose ON')
         self.btn_inference.setCheckable(True)
         self.btn_inference.setChecked(True)
-        self.btn_inference.setFixedHeight(32)
+        self.btn_inference.setFixedHeight(38)
         btn_row.addWidget(self.btn_inference)
 
         # detect + reselect
         self.btn_detect = QPushButton('Detect Athletes')
-        self.btn_detect.setFixedHeight(32)
+        self.btn_detect.setFixedHeight(38)
         btn_row.addWidget(self.btn_detect)
 
         self.btn_reselect = QPushButton('Reselect')
-        self.btn_reselect.setFixedHeight(32)
+        self.btn_reselect.setFixedHeight(38)
         btn_row.addWidget(self.btn_reselect)
 
         col.addLayout(btn_row)
@@ -503,7 +504,7 @@ class JLVisionV10(QMainWindow):
             'Keyboard:  Space play/pause  |  < > or , . step frame  |  '
             '1 2 4 8 speed  |  Mouse wheel = frame step  |  Esc quit'
         )
-        hint.setStyleSheet('color: #445; font-size: 10px;')
+        hint.setStyleSheet('color: #556; font-size: 12px;')
         col.addWidget(hint)
 
         return w
@@ -512,11 +513,11 @@ class JLVisionV10(QMainWindow):
 
     def _metrics_panel(self):
         w = QWidget()
-        w.setFixedWidth(270)
-        w.setStyleSheet('background: #0a0c12; border-left: 1px solid #181e2e;')
+        w.setFixedWidth(320)
+        w.setStyleSheet('background: #0a0c12; border-left: 2px solid #00ffd020;')
         col = QVBoxLayout(w)
-        col.setContentsMargins(10, 10, 10, 10)
-        col.setSpacing(8)
+        col.setContentsMargins(14, 14, 14, 14)
+        col.setSpacing(10)
 
         def grp(title, rows):
             g = QGroupBox(title)
@@ -714,17 +715,17 @@ class JLVisionV10(QMainWindow):
             for i, item in enumerate(self.detected_boxes):
                 x1, y1, x2, y2 = item['box']
                 cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 200), 2)
-                label_y = max(y1 - 8, 24)
-                cv2.rectangle(overlay, (x1, label_y - 22), (x1 + 130, label_y + 4),
+                label_y = max(y1 - 10, 32)
+                cv2.rectangle(overlay, (x1, label_y - 28), (x1 + 150, label_y + 6),
                               (13, 16, 22), -1)
-                cv2.putText(overlay, f'Athlete {i + 1}', (x1 + 6, label_y),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 200), 2, cv2.LINE_AA)
+                cv2.putText(overlay, f'Athlete {i + 1}', (x1 + 8, label_y),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 200), 2, cv2.LINE_AA)
 
             self._glass(overlay, 30, 22, w - 60, 72)
-            cv2.putText(overlay, 'JL VISION  |  SELECT TARGET ATHLETE', (52, 56),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 200), 2, cv2.LINE_AA)
-            cv2.putText(overlay, 'Click on the athlete you want to analyze', (52, 82),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.52, (200, 200, 200), 1, cv2.LINE_AA)
+            cv2.putText(overlay, 'JL VISION  |  SELECT TARGET ATHLETE', (52, 62),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 200), 2, cv2.LINE_AA)
+            cv2.putText(overlay, 'Click on the athlete you want to analyze', (52, 94),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (200, 200, 200), 1, cv2.LINE_AA)
 
         else:
             # -- review mode -------------------------------------------------
@@ -749,10 +750,10 @@ class JLVisionV10(QMainWindow):
             cv2.line(overlay, (cx, y1), (cx, y2), (0, 200, 160), 1)
 
             # Badge above athlete
-            badge_y = max(y1 - 36, 115)
-            self._glass(overlay, x1, badge_y, 170, 28, 0.75)
-            cv2.putText(overlay, 'TARGET ATHLETE', (x1 + 8, badge_y + 18),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 255, 200), 2, cv2.LINE_AA)
+            badge_y = max(y1 - 44, 120)
+            self._glass(overlay, x1, badge_y, 210, 36, 0.75)
+            cv2.putText(overlay, 'TARGET ATHLETE', (x1 + 10, badge_y + 24),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 200), 2, cv2.LINE_AA)
 
             # Pose inference
             if self.inference_on:
@@ -813,16 +814,16 @@ class JLVisionV10(QMainWindow):
             if pa and pb and pc:
                 ang = angle_at(pa, pb, pc)
                 angles[label_prefix] = ang
-                tag_x = max(4, min(pb[0] + off_x, w - 148))
-                tag_y = max(26, min(pb[1] + off_y, h - 8))
-                cv2.line(frame, pb, (tag_x + 66, tag_y - 6),
-                         (0, 255, 200), 1, cv2.LINE_AA)
-                cv2.rectangle(frame, (tag_x, tag_y - 22), (tag_x + 140, tag_y + 4),
+                tag_x = max(4, min(pb[0] + off_x, w - 200))
+                tag_y = max(36, min(pb[1] + off_y, h - 12))
+                cv2.line(frame, pb, (tag_x + 90, tag_y - 8),
+                         (0, 255, 200), 2, cv2.LINE_AA)
+                cv2.rectangle(frame, (tag_x, tag_y - 32), (tag_x + 190, tag_y + 6),
                               (12, 15, 22), -1)
-                cv2.rectangle(frame, (tag_x, tag_y - 22), (tag_x + 140, tag_y + 4),
-                              (0, 255, 200), 1)
-                cv2.putText(frame, f'{label_prefix}  {ang:.1f}deg', (tag_x + 6, tag_y - 6),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.46, (0, 255, 200), 1, cv2.LINE_AA)
+                cv2.rectangle(frame, (tag_x, tag_y - 32), (tag_x + 190, tag_y + 6),
+                              (0, 255, 200), 2)
+                cv2.putText(frame, f'{label_prefix}  {ang:.1f}deg', (tag_x + 8, tag_y - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 200), 2, cv2.LINE_AA)
 
         callout('hip_r',  'right_shoulder', 'right_hip',  'right_knee',  'HIP-R',  60, -40)
         callout('knee_r', 'right_hip',      'right_knee', 'right_ankle', 'KNEE-R', 60,  40)
