@@ -273,19 +273,19 @@ class MetricRow(QWidget):
     def __init__(self, label, parent=None):
         super().__init__(parent)
         row = QHBoxLayout(self)
-        row.setContentsMargins(6, 3, 6, 3)
+        row.setContentsMargins(6, 4, 6, 4)
         self._lbl = QLabel(label)
-        self._lbl.setStyleSheet('color: #7a8a9a; font-size: 13px;')
-        self._lbl.setFixedWidth(130)
+        self._lbl.setStyleSheet('color: #7a8a9a; font-size: 14px;')
+        self._lbl.setFixedWidth(140)
         self._val = QLabel('--')
-        self._val.setStyleSheet('color: #dde; font-size: 15px; font-weight: bold;')
+        self._val.setStyleSheet('color: #dde; font-size: 16px; font-weight: bold;')
         self._val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         row.addWidget(self._lbl)
         row.addWidget(self._val, 1)
 
     def set(self, text, color='#dde'):
         self._val.setText(str(text))
-        self._val.setStyleSheet(f'color: {color}; font-size: 15px; font-weight: bold;')
+        self._val.setStyleSheet(f'color: {color}; font-size: 16px; font-weight: bold;')
 
     def pending(self):
         self.set('pending', '#f5a623')
@@ -492,27 +492,27 @@ class JLVisionV10(QMainWindow):
 
     def _left_toolbar(self):
         w = QWidget()
-        w.setFixedWidth(130)
-        w.setStyleSheet('background: #080a10; border-right: 2px solid #00ffd020;')
+        w.setFixedWidth(160)
+        w.setStyleSheet('background: #080a10; border-right: 2px solid #00ffd030;')
         col = QVBoxLayout(w)
-        col.setContentsMargins(8, 16, 8, 16)
-        col.setSpacing(6)
+        col.setContentsMargins(10, 18, 10, 18)
+        col.setSpacing(8)
         col.setAlignment(Qt.AlignTop)
 
         # Section label
         lbl = QLabel('TOOLS')
-        lbl.setStyleSheet('color: #445; font-size: 11px; font-weight: bold; letter-spacing: 2px;')
+        lbl.setStyleSheet('color: #556; font-size: 12px; font-weight: bold; letter-spacing: 3px;')
         lbl.setAlignment(Qt.AlignCenter)
         col.addWidget(lbl)
-        col.addSpacing(4)
+        col.addSpacing(6)
 
         self._tool_btns = {}
         for name in ['Select', 'Line', 'Angle', 'Circle', 'Dot', 'Arrow', 'Text', 'Draw', 'Erase']:
             btn = QPushButton(name)
-            btn.setFixedSize(114, 40)
+            btn.setFixedSize(140, 44)
             btn.setCheckable(True)
             btn.setStyleSheet(
-                'QPushButton { font-size: 13px; font-weight: bold; text-align: left; padding-left: 12px; }'
+                'QPushButton { font-size: 14px; font-weight: bold; text-align: left; padding-left: 14px; }'
                 'QPushButton:checked { background: #00ffd0; color: #0d0f14; }'
             )
             col.addWidget(btn)
@@ -527,10 +527,15 @@ class JLVisionV10(QMainWindow):
         line.setFrameShape(QFrame.HLine)
         line.setStyleSheet('color: #1a2035;')
         col.addWidget(line)
-        col.addSpacing(4)
+        col.addSpacing(6)
 
         self.btn_cal = QPushButton('Calibrate')
-        self.btn_cal.setFixedSize(114, 40)
+        self.btn_cal.setFixedSize(140, 44)
+        self.btn_cal.setStyleSheet(
+            'QPushButton { font-size: 14px; font-weight: bold; '
+            'background: #0d1a16; border: 1px solid #00ffd0; border-radius: 5px; color: #00ffd0; }'
+            'QPushButton:hover { background: #00ffd0; color: #0d0f14; }'
+        )
         self.btn_cal.setToolTip('Click 2 points with known real-world distance')
         col.addWidget(self.btn_cal)
 
@@ -630,11 +635,11 @@ class JLVisionV10(QMainWindow):
 
     def _metrics_panel(self):
         w = QWidget()
-        w.setFixedWidth(320)
-        w.setStyleSheet('background: #0a0c12; border-left: 2px solid #00ffd020;')
+        w.setFixedWidth(360)
+        w.setStyleSheet('background: #0a0c12; border-left: 2px solid #00ffd030;')
         col = QVBoxLayout(w)
-        col.setContentsMargins(14, 14, 14, 14)
-        col.setSpacing(10)
+        col.setContentsMargins(16, 16, 16, 16)
+        col.setSpacing(12)
 
         def grp(title, rows):
             g = QGroupBox(title)
@@ -846,11 +851,16 @@ class JLVisionV10(QMainWindow):
             for i, item in enumerate(self.detected_boxes):
                 x1, y1, x2, y2 = item['box']
                 cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 200), 2)
-                label_y = max(y1 - 10, 32)
-                cv2.rectangle(overlay, (x1, label_y - 28), (x1 + 150, label_y + 6),
-                              (13, 16, 22), -1)
-                cv2.putText(overlay, f'Athlete {i + 1}', (x1 + 8, label_y),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 200), 2, cv2.LINE_AA)
+                # Short label "A1" centered above box — avoids overlap in crowds
+                tag = f'A{i + 1}'
+                (tw, th), _ = cv2.getTextSize(tag, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 2)
+                cx_box = (x1 + x2) // 2
+                tx = max(4, min(cx_box - tw // 2, overlay.shape[1] - tw - 4))
+                ty = max(th + 6, y1 - 6)
+                cv2.rectangle(overlay, (tx - 4, ty - th - 4), (tx + tw + 4, ty + 4),
+                              (0, 20, 16), -1)
+                cv2.putText(overlay, tag, (tx, ty),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 200), 2, cv2.LINE_AA)
 
             self._glass(overlay, 30, 22, w - 60, 72)
             cv2.putText(overlay, 'JL VISION  |  SELECT TARGET ATHLETE', (52, 62),
@@ -1154,8 +1164,18 @@ if __name__ == '__main__':
     if not video.exists():
         print(f'Video not found: {video}')
         sys.exit(1)
+
+    # High-DPI support — must be set before QApplication is created
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
+    # Boost base font so everything scales up proportionally
+    base_font = app.font()
+    base_font.setPointSize(11)
+    base_font.setFamily('Segoe UI')
+    app.setFont(base_font)
     win = JLVisionV10(video)
     win.show()
     sys.exit(app.exec_())
