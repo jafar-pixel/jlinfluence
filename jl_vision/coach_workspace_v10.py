@@ -30,9 +30,9 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap, QFont
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # MoveNet
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 
 MOVENET_URLS = {
     'lightning': 'https://tfhub.dev/google/movenet/singlepose/lightning/4',
@@ -66,7 +66,7 @@ SKELETON_EDGES = [
 
 class MoveNet:
     def __init__(self, variant='lightning'):
-        print(f'Loading MoveNet {variant} …')
+        print(f'Loading MoveNet {variant} ...')
         self._size = INPUT_SIZES[variant]
         module = hub.load(MOVENET_URLS[variant])
         self._infer = module.signatures['serving_default']
@@ -101,9 +101,9 @@ class MoveNet:
         return result
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # YOLO helpers
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 
 def detect_people(yolo, bgr, conf=0.35):
     boxes = []
@@ -125,12 +125,12 @@ def iou(a, b):
     return inter / (union + 1e-9)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # Geometry
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 
 def angle_at(a, vertex, c):
-    """Angle in degrees at 'vertex' between rays vertex→a and vertex→c."""
+    """Angle in degrees at 'vertex' between rays vertex->a and vertex->c."""
     ax, ay = a[0] - vertex[0], a[1] - vertex[1]
     cx, cy = c[0] - vertex[0], c[1] - vertex[1]
     dot = ax * cx + ay * cy
@@ -146,9 +146,9 @@ def kp_xy(kps, name, w, h, thresh=0.15):
     return (int(x_n * w), int(y_n * h))
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # Qt stylesheet
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 
 STYLE = """
 * { font-family: "Segoe UI", Arial, sans-serif; }
@@ -182,9 +182,9 @@ QTextEdit {
 """
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # Metric label
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 
 class MetricRow(QWidget):
     def __init__(self, label, parent=None):
@@ -194,7 +194,7 @@ class MetricRow(QWidget):
         self._lbl = QLabel(label)
         self._lbl.setStyleSheet('color: #6a7a8a; font-size: 11px;')
         self._lbl.setFixedWidth(110)
-        self._val = QLabel('—')
+        self._val = QLabel('--')
         self._val.setStyleSheet('color: #dde; font-size: 12px; font-weight: bold;')
         self._val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         row.addWidget(self._lbl)
@@ -208,9 +208,9 @@ class MetricRow(QWidget):
         self.set('pending', '#f5a623')
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # Video canvas  (QLabel that draws overlay directly from OpenCV frame)
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 
 class VideoCanvas(QLabel):
     athlete_clicked = pyqtSignal(int)   # emits detected-box index
@@ -232,14 +232,14 @@ class VideoCanvas(QLabel):
         self._select_mode = True
         self._cal_mode = False
 
-    # ── coordinate mapping ──────────────────────────────────────────────────
+    # -- coordinate mapping --------------------------------------------------
 
     def _to_frame(self, wx, wy):
         fx = (wx - self._off_x) * self._frame_w / self._disp_w
         fy = (wy - self._off_y) * self._frame_h / self._disp_h
         return int(fx), int(fy)
 
-    # ── display ─────────────────────────────────────────────────────────────
+    # -- display -------------------------------------------------------------
 
     def show_frame(self, bgr):
         if bgr is None:
@@ -257,7 +257,7 @@ class VideoCanvas(QLabel):
         self._off_y = (lh - self._disp_h) // 2
         self.setPixmap(scaled)
 
-    # ── mouse ───────────────────────────────────────────────────────────────
+    # -- mouse ---------------------------------------------------------------
 
     def mousePressEvent(self, event):
         fx, fy = self._to_frame(event.x(), event.y())
@@ -273,16 +273,16 @@ class VideoCanvas(QLabel):
                 return
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # Main window
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 
 class JLVisionV10(QMainWindow):
 
     def __init__(self, video_path):
         super().__init__()
         self.video_path = str(video_path)
-        self.setWindowTitle('JL Vision  ·  Coach Workspace  v10')
+        self.setWindowTitle('JL Vision  .  Coach Workspace  v10')
         self.resize(1440, 900)
         self.setStyleSheet(STYLE)
         self.setWindowState(Qt.WindowMaximized)
@@ -327,9 +327,9 @@ class JLVisionV10(QMainWindow):
         self._seek(0)
         self._run_detection()
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
     # UI construction
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
 
     def _build_ui(self):
         root_widget = QWidget()
@@ -358,7 +358,7 @@ class JLVisionV10(QMainWindow):
 
         root.addWidget(self._metrics_panel())
 
-    # ── header ───────────────────────────────────────────────────────────────
+    # -- header ---------------------------------------------------------------
 
     def _header(self):
         w = QWidget()
@@ -372,9 +372,9 @@ class JLVisionV10(QMainWindow):
         row.addWidget(title)
         row.addStretch()
 
-        self.hdr_frame = QLabel('Frame: —')
+        self.hdr_frame = QLabel('Frame: -')
         self.hdr_speed = QLabel('Speed: 1x')
-        self.hdr_pose  = QLabel('Pose: —')
+        self.hdr_pose  = QLabel('Pose: -')
         for lbl in [self.hdr_frame, self.hdr_speed, self.hdr_pose]:
             lbl.setStyleSheet('color: #778; font-size: 12px;')
             row.addWidget(lbl)
@@ -384,7 +384,7 @@ class JLVisionV10(QMainWindow):
 
         return w
 
-    # ── left annotation toolbar ──────────────────────────────────────────────
+    # -- left annotation toolbar ----------------------------------------------
 
     def _left_toolbar(self):
         w = QWidget()
@@ -396,9 +396,9 @@ class JLVisionV10(QMainWindow):
         col.setAlignment(Qt.AlignTop)
 
         self._tool_btns = {}
-        for icon, name in [('↖','Select'),('╱','Line'),('∠','Angle'),
-                            ('○','Circle'),('•','Dot'),('→','Arrow'),
-                            ('T','Text'),('✎','Draw'),('⌫','Erase')]:
+        for icon, name in [('Sel','Select'),('-','Line'),('/<','Angle'),
+                            ('O','Circle'),('.','Dot'),('->','Arrow'),
+                            ('T','Text'),('Drw','Draw'),('X','Erase')]:
             btn = QPushButton(icon)
             btn.setFixedSize(38, 38)
             btn.setCheckable(True)
@@ -412,14 +412,14 @@ class JLVisionV10(QMainWindow):
 
         col.addStretch()
 
-        self.btn_cal = QPushButton('⚖')
+        self.btn_cal = QPushButton('Cal')
         self.btn_cal.setFixedSize(38, 38)
         self.btn_cal.setToolTip('Calibrate distance (2 clicks)')
         col.addWidget(self.btn_cal)
 
         return w
 
-    # ── playback controls ────────────────────────────────────────────────────
+    # -- playback controls ----------------------------------------------------
 
     def _controls(self):
         w = QWidget()
@@ -447,14 +447,14 @@ class JLVisionV10(QMainWindow):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
 
-        self.btn_play  = QPushButton('▶  Play')
+        self.btn_play  = QPushButton('> Play')
         self.btn_play.setCheckable(True)
         self.btn_play.setFixedHeight(32)
 
-        self.btn_p10   = QPushButton('◀◀ -10')
-        self.btn_p1    = QPushButton('◀ -1')
-        self.btn_n1    = QPushButton('+1 ▶')
-        self.btn_n10   = QPushButton('+10 ▶▶')
+        self.btn_p10   = QPushButton('<< -10')
+        self.btn_p1    = QPushButton('< -1')
+        self.btn_n1    = QPushButton('+1 >')
+        self.btn_n10   = QPushButton('+10 >>')
         for b in [self.btn_p10, self.btn_p1, self.btn_n1, self.btn_n10]:
             b.setFixedHeight(32)
 
@@ -470,7 +470,7 @@ class JLVisionV10(QMainWindow):
         spd_lbl.setStyleSheet('color: #666; font-size: 12px;')
         btn_row.addWidget(spd_lbl)
         self._spd_btns = {}
-        for label, val in [('1x', 1.0), ('½x', 0.5), ('¼x', 0.25), ('⅛x', 0.125)]:
+        for label, val in [('1x', 1.0), ('1/2x', 0.5), ('1/4x', 0.25), ('1/8x', 0.125)]:
             b = QPushButton(label)
             b.setFixedSize(40, 32)
             b.setCheckable(True)
@@ -488,11 +488,11 @@ class JLVisionV10(QMainWindow):
         btn_row.addWidget(self.btn_inference)
 
         # detect + reselect
-        self.btn_detect = QPushButton('⬡ Detect Athletes')
+        self.btn_detect = QPushButton('Detect Athletes')
         self.btn_detect.setFixedHeight(32)
         btn_row.addWidget(self.btn_detect)
 
-        self.btn_reselect = QPushButton('⟳ Reselect')
+        self.btn_reselect = QPushButton('Reselect')
         self.btn_reselect.setFixedHeight(32)
         btn_row.addWidget(self.btn_reselect)
 
@@ -500,15 +500,15 @@ class JLVisionV10(QMainWindow):
 
         # keyboard hint strip
         hint = QLabel(
-            'Keyboard:  Space play/pause  ·  ← → or , . step frame  ·  '
-            '1 2 4 8 speed  ·  Mouse wheel = frame step  ·  Esc quit'
+            'Keyboard:  Space play/pause  |  < > or , . step frame  |  '
+            '1 2 4 8 speed  |  Mouse wheel = frame step  |  Esc quit'
         )
         hint.setStyleSheet('color: #445; font-size: 10px;')
         col.addWidget(hint)
 
         return w
 
-    # ── metrics panel ────────────────────────────────────────────────────────
+    # -- metrics panel --------------------------------------------------------
 
     def _metrics_panel(self):
         w = QWidget()
@@ -531,10 +531,10 @@ class JLVisionV10(QMainWindow):
             return metrics
 
         self.m_athlete = grp('Target Athlete', [
-            'Status', 'Frame', 'Box W × H', 'Center',
+            'Status', 'Frame', 'Box W x H', 'Center',
         ])
 
-        self.m_pose = grp('Pose Layer — MoveNet', [
+        self.m_pose = grp('Pose Layer - MoveNet', [
             'Pose', 'Hip R', 'Knee R', 'Hip L', 'Knee L', 'Torso lean',
         ])
 
@@ -544,7 +544,7 @@ class JLVisionV10(QMainWindow):
         self.m_sprint['Speed'].pending()
         self.m_sprint['Calibration'].set('not set', '#f5a623')
 
-        self.m_pending = grp('Pending — v11', [
+        self.m_pending = grp('Pending - v11', [
             'Stride length', 'Ground contact', 'Step frequency',
         ])
         for m in self.m_pending.values():
@@ -554,7 +554,7 @@ class JLVisionV10(QMainWindow):
         ng = QGroupBox('Coach Notes')
         nv = QVBoxLayout(ng)
         self.notes = QTextEdit()
-        self.notes.setPlaceholderText('Type coaching observations…')
+        self.notes.setPlaceholderText('Type coaching observations...')
         self.notes.setFixedHeight(72)
         nv.addWidget(self.notes)
         nr = QHBoxLayout()
@@ -567,7 +567,7 @@ class JLVisionV10(QMainWindow):
         col.addStretch()
 
         # JL Pulse placeholder
-        pp = QGroupBox('JL Pulse — Not Connected')
+        pp = QGroupBox('JL Pulse - Not Connected')
         pp.setStyleSheet('QGroupBox { color: #f5a623; }')
         pv = QVBoxLayout(pp)
         for lbl in ['Body map', 'Fatigue signal', 'Readiness']:
@@ -578,9 +578,9 @@ class JLVisionV10(QMainWindow):
 
         return w
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
     # Signal wiring
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
 
     def _connect(self):
         self.btn_play.clicked.connect(self._toggle_play)
@@ -603,9 +603,9 @@ class JLVisionV10(QMainWindow):
         for name, btn in self._tool_btns.items():
             btn.clicked.connect(lambda _, n=name: self._pick_tool(n))
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
     # Playback
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
 
     def _toggle_play(self, on):
         if on:
@@ -616,13 +616,13 @@ class JLVisionV10(QMainWindow):
     def _play(self):
         self.playing = True
         self.btn_play.setChecked(True)
-        self.btn_play.setText('⏸  Pause')
+        self.btn_play.setText('|| Pause')
         self.timer.start(max(int(1000 / (self.fps * self.speed)), 16))
 
     def _pause(self):
         self.playing = False
         self.btn_play.setChecked(False)
-        self.btn_play.setText('▶  Play')
+        self.btn_play.setText('> Play')
         self.timer.stop()
 
     def _tick(self):
@@ -670,9 +670,9 @@ class JLVisionV10(QMainWindow):
         self.inference_on = on
         self.btn_inference.setText('Pose ON' if on else 'Pose OFF')
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
     # Athlete detection & selection
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
 
     def _run_detection(self):
         if self._current_bgr is None:
@@ -699,9 +699,9 @@ class JLVisionV10(QMainWindow):
         self._pause()
         self._run_detection()
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
     # Render (overlay + display)
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
 
     def _render(self, bgr):
         if bgr is None:
@@ -710,7 +710,7 @@ class JLVisionV10(QMainWindow):
         overlay = bgr.copy()
 
         if self.selected_box is None:
-            # ── selection mode ──────────────────────────────────────────────
+            # -- selection mode ----------------------------------------------
             for i, item in enumerate(self.detected_boxes):
                 x1, y1, x2, y2 = item['box']
                 cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 255, 200), 2)
@@ -727,7 +727,7 @@ class JLVisionV10(QMainWindow):
                         cv2.FONT_HERSHEY_SIMPLEX, 0.52, (200, 200, 200), 1, cv2.LINE_AA)
 
         else:
-            # ── review mode ─────────────────────────────────────────────────
+            # -- review mode -------------------------------------------------
 
             # Re-track athlete via IoU (every 10 frames to keep playback smooth)
             if self.current_frame % 10 == 0:
@@ -771,7 +771,7 @@ class JLVisionV10(QMainWindow):
 
             # Metrics panel
             self.m_athlete['Frame'].set(f'{self.current_frame + 1} / {self.total_frames}')
-            self.m_athlete['Box W × H'].set(f'{bw} × {bh} px')
+            self.m_athlete['Box W x H'].set(f'{bw} x {bh} px')
             self.m_athlete['Center'].set(f'{cx}, {cy}')
 
             self._update_speed()
@@ -821,7 +821,7 @@ class JLVisionV10(QMainWindow):
                               (12, 15, 22), -1)
                 cv2.rectangle(frame, (tag_x, tag_y - 22), (tag_x + 140, tag_y + 4),
                               (0, 255, 200), 1)
-                cv2.putText(frame, f'{label_prefix}  {ang:.1f}°', (tag_x + 6, tag_y - 6),
+                cv2.putText(frame, f'{label_prefix}  {ang:.1f}deg', (tag_x + 6, tag_y - 6),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.46, (0, 255, 200), 1, cv2.LINE_AA)
 
         callout('hip_r',  'right_shoulder', 'right_hip',  'right_knee',  'HIP-R',  60, -40)
@@ -832,14 +832,14 @@ class JLVisionV10(QMainWindow):
 
     def _update_pose_metrics(self, kps, angles, w, h):
         self.m_pose['Pose'].set('Active', '#00ffd0')
-        self.m_pose['Hip R'].set(f"{angles.get('HIP-R', '—'):.1f}°"
-                                 if 'HIP-R' in angles else '—', '#00ffd0')
-        self.m_pose['Knee R'].set(f"{angles.get('KNEE-R', '—'):.1f}°"
-                                  if 'KNEE-R' in angles else '—', '#00ffd0')
-        self.m_pose['Hip L'].set(f"{angles.get('HIP-L', '—'):.1f}°"
-                                 if 'HIP-L' in angles else '—', '#00ffd0')
-        self.m_pose['Knee L'].set(f"{angles.get('KNEE-L', '—'):.1f}°"
-                                  if 'KNEE-L' in angles else '—', '#00ffd0')
+        self.m_pose['Hip R'].set(f"{angles['HIP-R']:.1f} deg"
+                                 if 'HIP-R' in angles else '--', '#00ffd0')
+        self.m_pose['Knee R'].set(f"{angles['KNEE-R']:.1f} deg"
+                                  if 'KNEE-R' in angles else '--', '#00ffd0')
+        self.m_pose['Hip L'].set(f"{angles['HIP-L']:.1f} deg"
+                                 if 'HIP-L' in angles else '--', '#00ffd0')
+        self.m_pose['Knee L'].set(f"{angles['KNEE-L']:.1f} deg"
+                                  if 'KNEE-L' in angles else '--', '#00ffd0')
 
         # Torso lean
         r_sh = kp_xy(kps, 'right_shoulder', w, h)
@@ -852,7 +852,7 @@ class JLVisionV10(QMainWindow):
             dx, dy = sh[0] - hp[0], sh[1] - hp[1]
             lean = math.degrees(math.atan2(abs(dx), abs(dy) + 1e-9))
             direction = 'fwd' if dx > 0 else 'back'
-            self.m_pose['Torso lean'].set(f'{lean:.1f}° {direction}', '#00ffd0')
+            self.m_pose['Torso lean'].set(f'{lean:.1f} deg {direction}', '#00ffd0')
 
     def _update_speed(self):
         if self.pixels_per_meter is None:
@@ -881,9 +881,9 @@ class JLVisionV10(QMainWindow):
         }
         self._session_log.append(entry)
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
     # Calibration
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
 
     def _start_cal(self):
         self._pause()
@@ -910,11 +910,11 @@ class JLVisionV10(QMainWindow):
                 self.pixels_per_meter = px_dist / meters
                 self.m_sprint['Calibration'].set(
                     f'{self.pixels_per_meter:.1f} px/m', '#00ffd0')
-                self.m_sprint['Speed'].set('Tracking…', '#aaa')
+                self.m_sprint['Speed'].set('Tracking...', '#aaa')
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
     # CSV export
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
 
     def _export_csv(self):
         path, _ = QFileDialog.getSaveFileName(
@@ -928,17 +928,17 @@ class JLVisionV10(QMainWindow):
             w.writerows(self._session_log)
         QMessageBox.information(self, 'Exported', f'Saved to:\n{path}')
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
     # Tool selection
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
 
     def _pick_tool(self, name):
         for n, btn in self._tool_btns.items():
             btn.setChecked(n == name)
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
     # Keyboard + wheel
-    # ──────────────────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
 
     def keyPressEvent(self, event):
         k = event.key()
@@ -968,9 +968,9 @@ class JLVisionV10(QMainWindow):
         event.accept()
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # Entry point
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
