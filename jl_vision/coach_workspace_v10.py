@@ -278,8 +278,10 @@ class MetricRow(QWidget):
         self._lbl.setStyleSheet('color: #7a8a9a; font-size: 14px;')
         self._lbl.setFixedWidth(140)
         self._val = QLabel('--')
-        self._val.setStyleSheet('color: #dde; font-size: 16px; font-weight: bold;')
+        self._val.setStyleSheet('color: #dde; font-size: 15px; font-weight: bold;')
         self._val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._val.setWordWrap(False)
+        self._val.setMaximumWidth(180)
         row.addWidget(self._lbl)
         row.addWidget(self._val, 1)
 
@@ -565,69 +567,66 @@ class JLVisionV10(QMainWindow):
         scr_row.addWidget(self._lbl_total)
         col.addLayout(scr_row)
 
-        # button row
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
+        # --- Row 1: transport ---
+        transport = QHBoxLayout()
+        transport.setSpacing(8)
 
-        self.btn_play  = QPushButton('> Play')
+        self.btn_p10  = QPushButton('<< -10')
+        self.btn_p1   = QPushButton('< -1')
+        self.btn_play = QPushButton('> Play')
         self.btn_play.setCheckable(True)
-        self.btn_play.setFixedHeight(38)
-        self.btn_play.setMinimumWidth(90)
-
-        self.btn_p10   = QPushButton('<< -10')
-        self.btn_p1    = QPushButton('< -1')
-        self.btn_n1    = QPushButton('+1 >')
-        self.btn_n10   = QPushButton('+10 >>')
-        for b in [self.btn_p10, self.btn_p1, self.btn_n1, self.btn_n10]:
+        self.btn_play.setMinimumWidth(100)
+        self.btn_n1   = QPushButton('+1 >')
+        self.btn_n10  = QPushButton('+10 >>')
+        for b in [self.btn_p10, self.btn_p1, self.btn_play, self.btn_n1, self.btn_n10]:
             b.setFixedHeight(38)
 
-        btn_row.addWidget(self.btn_p10)
-        btn_row.addWidget(self.btn_p1)
-        btn_row.addWidget(self.btn_play)
-        btn_row.addWidget(self.btn_n1)
-        btn_row.addWidget(self.btn_n10)
-        btn_row.addStretch()
+        transport.addWidget(self.btn_p10)
+        transport.addWidget(self.btn_p1)
+        transport.addWidget(self.btn_play)
+        transport.addWidget(self.btn_n1)
+        transport.addWidget(self.btn_n10)
+        transport.addStretch()
 
-        # speed buttons
         spd_lbl = QLabel('Speed:')
         spd_lbl.setStyleSheet('color: #778; font-size: 13px;')
-        btn_row.addWidget(spd_lbl)
+        transport.addWidget(spd_lbl)
         self._spd_btns = {}
         for label, val in [('1x', 1.0), ('1/2x', 0.5), ('1/4x', 0.25), ('1/8x', 0.125)]:
             b = QPushButton(label)
             b.setFixedSize(52, 38)
             b.setCheckable(True)
             b.setChecked(val == 1.0)
-            btn_row.addWidget(b)
+            transport.addWidget(b)
             self._spd_btns[val] = b
 
-        btn_row.addStretch()
+        col.addLayout(transport)
 
-        # inference toggle
+        # --- Row 2: tools ---
+        tools = QHBoxLayout()
+        tools.setSpacing(8)
+
         self.btn_inference = QPushButton('Pose ON')
         self.btn_inference.setCheckable(True)
         self.btn_inference.setChecked(True)
-        self.btn_inference.setFixedHeight(38)
-        btn_row.addWidget(self.btn_inference)
+        self.btn_inference.setFixedHeight(34)
 
-        # detect + reselect
-        self.btn_detect = QPushButton('Detect Athletes')
-        self.btn_detect.setFixedHeight(38)
-        btn_row.addWidget(self.btn_detect)
+        self.btn_detect   = QPushButton('Detect Athletes')
+        self.btn_detect.setFixedHeight(34)
 
         self.btn_reselect = QPushButton('Reselect')
-        self.btn_reselect.setFixedHeight(38)
-        btn_row.addWidget(self.btn_reselect)
+        self.btn_reselect.setFixedHeight(34)
 
-        col.addLayout(btn_row)
+        tools.addWidget(self.btn_inference)
+        tools.addWidget(self.btn_detect)
+        tools.addWidget(self.btn_reselect)
+        tools.addStretch()
 
-        # keyboard hint strip
-        hint = QLabel(
-            'Keyboard:  Space play/pause  |  < > or , . step frame  |  '
-            '1 2 4 8 speed  |  Mouse wheel = frame step  |  Esc quit'
-        )
-        hint.setStyleSheet('color: #556; font-size: 12px;')
-        col.addWidget(hint)
+        hint = QLabel('Space play/pause  |  < > step  |  1 2 4 8 speed  |  wheel = frame  |  Esc quit')
+        hint.setStyleSheet('color: #445; font-size: 11px;')
+        tools.addWidget(hint)
+
+        col.addLayout(tools)
 
         return w
 
