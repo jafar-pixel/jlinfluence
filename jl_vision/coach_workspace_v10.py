@@ -138,7 +138,7 @@ def angle_at(a, vertex, c):
     return math.degrees(math.acos(max(-1.0, min(1.0, dot / mag))))
 
 
-def kp_xy(kps, name, w, h, thresh=0.3):
+def kp_xy(kps, name, w, h, thresh=0.15):
     """Return (x, y) pixel or None."""
     y_n, x_n, conf = kps[KP[name]]
     if conf < thresh:
@@ -285,6 +285,7 @@ class JLVisionV10(QMainWindow):
         self.setWindowTitle('JL Vision  ·  Coach Workspace  v10')
         self.resize(1440, 900)
         self.setStyleSheet(STYLE)
+        self.setWindowState(Qt.WindowMaximized)
 
         # models
         self.yolo = YOLO('yolov8n.pt')
@@ -486,7 +487,11 @@ class JLVisionV10(QMainWindow):
         self.btn_inference.setFixedHeight(32)
         btn_row.addWidget(self.btn_inference)
 
-        # reselect
+        # detect + reselect
+        self.btn_detect = QPushButton('⬡ Detect Athletes')
+        self.btn_detect.setFixedHeight(32)
+        btn_row.addWidget(self.btn_detect)
+
         self.btn_reselect = QPushButton('⟳ Reselect')
         self.btn_reselect.setFixedHeight(32)
         btn_row.addWidget(self.btn_reselect)
@@ -589,6 +594,7 @@ class JLVisionV10(QMainWindow):
         for val, btn in self._spd_btns.items():
             btn.clicked.connect(lambda _, v=val: self._set_speed(v))
 
+        self.btn_detect.clicked.connect(self._run_detection)
         self.btn_reselect.clicked.connect(self._reselect)
         self.btn_inference.clicked.connect(self._toggle_inference)
         self.btn_cal.clicked.connect(self._start_cal)
@@ -723,12 +729,13 @@ class JLVisionV10(QMainWindow):
         else:
             # ── review mode ─────────────────────────────────────────────────
 
-            # Re-track athlete via IoU
-            current = detect_people(self.yolo, bgr, conf=0.30)
-            if current:
-                best = max(current, key=lambda b: iou(b['box'], self.selected_box))
-                if iou(best['box'], self.selected_box) > 0.25:
-                    self.selected_box = best['box']
+            # Re-track athlete via IoU (every 10 frames to keep playback smooth)
+            if self.current_frame % 10 == 0:
+                current = detect_people(self.yolo, bgr, conf=0.30)
+                if current:
+                    best = max(current, key=lambda b: iou(b['box'], self.selected_box))
+                    if iou(best['box'], self.selected_box) > 0.25:
+                        self.selected_box = best['box']
 
             x1, y1, x2, y2 = self.selected_box
             bw, bh = x2 - x1, y2 - y1
@@ -783,13 +790,17 @@ class JLVisionV10(QMainWindow):
             pa = kp_xy(kps, a_name, w, h)
             pb = kp_xy(kps, b_name, w, h)
             if pa and pb:
-                cv2.line(frame, pa, pb, (0, 200, 255), 2, cv2.LINE_AA)
-        for name in ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip',
-                     'left_knee', 'right_knee', 'left_ankle', 'right_ankle']:
+                cv2.line(frame, pa, pb, (0, 200, 255), 3, cv2.LINE_AA)
+        # Draw all 17 keypoints regardless of edge connections
+        for name in KEYPOINT_NAMES:
             pt = kp_xy(kps, name, w, h)
             if pt:
-                cv2.circle(frame, pt, 6, (0, 255, 255), -1, cv2.LINE_AA)
-                cv2.circle(frame, pt, 9, (0, 200, 255), 1, cv2.LINE_AA)
+                color = (0, 255, 200) if name in (
+                    'left_shoulder', 'right_shoulder', 'left_hip', 'right_hip',
+                    'left_knee', 'right_knee', 'left_ankle', 'right_ankle'
+                ) else (180, 220, 255)
+                cv2.circle(frame, pt, 7, color, -1, cv2.LINE_AA)
+                cv2.circle(frame, pt, 10, (0, 200, 255), 1, cv2.LINE_AA)
 
     def _draw_callouts(self, frame, kps, w, h):
         """Draw offset angle tags; return dict of computed angles."""
