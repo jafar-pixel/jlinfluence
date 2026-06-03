@@ -147,6 +147,89 @@ def kp_xy(kps, name, w, h, thresh=0.15):
 
 
 # ------------------------------------------------------------------------------
+# Stride detector
+# ------------------------------------------------------------------------------
+
+class StrideDetector:
+    """Detects ground-contact events from ankle keypoints and computes
+    step frequency and stride length."""
+
+    DEBOUNCE_SEC = 0.18   # min seconds between contacts on same foot
+    WINDOW       = 9      # frames used for local-max detection
+
+    def __init__(self, fps):
+        self.fps = fps
+        self._y   = {'left': deque(maxlen=30), 'right': deque(maxlen=30)}
+        self._x   = {'left': deque(maxlen=30), 'right': deque(maxlen=30)}
+        self._fr  = {'left': deque(maxlen=30), 'right': deque(maxlen=30)}
+        self._contacts = {'left': [], 'right': []}   # (frame, x_px)
+        # Published outputs
+        self.stride_length_m  = None
+        self.step_freq_hz     = None
+
+    def update(self, frame_idx, kps, w, h, pixels_per_meter=None):
+        for side in ('left', 'right'):
+            pt = kp_xy(kps, f'{side}_ankle', w, h, thresh=0.2)
+            if pt is None:
+                continue
+            self._x[side].append(pt[0])
+            self._y[side].append(pt[1])
+            self._fr[side].append(frame_idx)
+        self._detect(pixels_per_meter)
+
+    def _detect(self, ppm):
+        deb = self.DEBOUNCE_SEC * self.fps
+        half = self.WINDOW // 2
+        for side in ('left', 'right'):
+            ys = list(self._y[side])
+            xs = list(self._x[side])
+            fs = list(self._fr[side])
+            if len(ys) < self.WINDOW:
+                continue
+            mid = len(ys) - half - 1
+            if mid < half:
+                continue
+            y_mid = ys[mid]
+            # local max in y (screen: larger y = closer to ground)
+            if not all(y_mid >= ys[i] - 2 for i in range(len(ys))):
+                continue
+            f_mid = fs[mid]
+            x_mid = xs[mid]
+            last = self._contacts[side]
+            if last and (f_mid - last[-1][0]) < deb:
+                continue
+            self._contacts[side].append((f_mid, x_mid))
+            # keep only last 6 contacts per side
+            self._contacts[side] = self._contacts[side][-6:]
+
+        # step frequency
+        all_c = sorted(
+            self._contacts['left'][-3:] + self._contacts['right'][-3:],
+            key=lambda c: c[0]
+        )
+        if len(all_c) >= 3:
+            span = all_c[-1][0] - all_c[0][0]
+            if span > 0:
+                self.step_freq_hz = (len(all_c) - 1) / (span / self.fps)
+
+        # stride length (same-side consecutive contacts)
+        for side in ('left', 'right'):
+            if len(self._contacts[side]) >= 2 and ppm:
+                dx = abs(self._contacts[side][-1][1] -
+                         self._contacts[side][-2][1])
+                self.stride_length_m = dx / ppm
+                break
+
+    def reset(self):
+        for side in ('left', 'right'):
+            self._y[side].clear(); self._x[side].clear()
+            self._fr[side].clear()
+        self._contacts = {'left': [], 'right': []}
+        self.stride_length_m = None
+        self.step_freq_hz = None
+
+
+# ------------------------------------------------------------------------------
 # Qt stylesheet
 # ------------------------------------------------------------------------------
 
@@ -311,6 +394,10 @@ class JLVisionV10(QMainWindow):
         # speed tracking
         self.center_history = deque(maxlen=20)
         self.pixels_per_meter = None
+
+        # stride detection
+        self.stride_detector = StrideDetector(self.fps)
+        self._cal_prompted = False   # auto-prompt calibration once on first lock
 
         # calibration
         self._cal_pts = []
@@ -693,8 +780,22 @@ class JLVisionV10(QMainWindow):
         self.selected_box = self.detected_boxes[idx]['box']
         self.canvas._select_mode = False
         self.center_history.clear()
+        self.stride_detector.reset()
         self._render(self._current_bgr)
         self.m_athlete['Status'].set('Target Locked', '#00ffd0')
+        # Auto-prompt calibration the first time an athlete is locked
+        if not self._cal_prompted and self.pixels_per_meter is None:
+            self._cal_prompted = True
+            QMessageBox.information(
+                self, 'Calibration needed',
+                'Athlete locked.\n\n'
+                'To enable Speed and Stride Length:\n'
+                '  1. Click  Cal  in the left toolbar\n'
+                '  2. Click two points with a known distance\n'
+                '     (e.g. lane width = 1.22 m, 10 m cone gap)\n'
+                '  3. Enter the real-world distance in metres\n\n'
+                'You can skip this and calibrate later.'
+            )
 
     def _reselect(self):
         self._pause()
@@ -763,6 +864,9 @@ class JLVisionV10(QMainWindow):
                     self._draw_skeleton(overlay, kps, w, h)
                     angles = self._draw_callouts(overlay, kps, w, h)
                     self._update_pose_metrics(kps, angles, w, h)
+                    self.stride_detector.update(
+                        self.current_frame, kps, w, h, self.pixels_per_meter)
+                    self._update_stride_metrics()
                     self.hdr_pose.setText('Pose: Active')
                 else:
                     self.hdr_pose.setText('Pose: Not found')
@@ -804,31 +908,61 @@ class JLVisionV10(QMainWindow):
                 cv2.circle(frame, pt, 10, (0, 200, 255), 1, cv2.LINE_AA)
 
     def _draw_callouts(self, frame, kps, w, h):
-        """Draw offset angle tags; return dict of computed angles."""
+        """Draw angle callout tags in two fixed columns flanking the bounding box.
+        Right side tags go right of box x2; left side tags go left of box x1.
+        Rows are spaced vertically so they never overlap each other."""
         angles = {}
+        TAG_W, TAG_H = 190, 38
 
-        def callout(joint, a_kp, b_kp, c_kp, label_prefix, off_x, off_y):
+        if self.selected_box:
+            bx1, by1, bx2, by2 = self.selected_box
+            bh = by2 - by1
+        else:
+            bx1, by1, bx2, by2 = w // 2, 0, w // 2, h
+            bh = h
+
+        # Fixed column positions: right of box and left of box
+        r_col = min(bx2 + 18, w - TAG_W - 4)
+        l_col = max(bx1 - TAG_W - 18, 4)
+
+        # Vertical slots: hip at ~35% down box, knee at ~62% down box
+        slots = {
+            'HIP-R':  (r_col, max(by1 + int(bh * 0.32), 42)),
+            'KNEE-R': (r_col, max(by1 + int(bh * 0.62), 42 + TAG_H + 8)),
+            'HIP-L':  (l_col, max(by1 + int(bh * 0.32), 42)),
+            'KNEE-L': (l_col, max(by1 + int(bh * 0.62), 42 + TAG_H + 8)),
+        }
+        # Clamp rows to frame height
+        for k in slots:
+            tx, ty = slots[k]
+            slots[k] = (tx, min(ty, h - TAG_H - 4))
+
+        specs = [
+            ('HIP-R',  'right_shoulder', 'right_hip',  'right_knee'),
+            ('KNEE-R', 'right_hip',      'right_knee', 'right_ankle'),
+            ('HIP-L',  'left_shoulder',  'left_hip',   'left_knee'),
+            ('KNEE-L', 'left_hip',       'left_knee',  'left_ankle'),
+        ]
+        for label, a_kp, b_kp, c_kp in specs:
             pa = kp_xy(kps, a_kp, w, h)
             pb = kp_xy(kps, b_kp, w, h)
             pc = kp_xy(kps, c_kp, w, h)
-            if pa and pb and pc:
-                ang = angle_at(pa, pb, pc)
-                angles[label_prefix] = ang
-                tag_x = max(4, min(pb[0] + off_x, w - 200))
-                tag_y = max(36, min(pb[1] + off_y, h - 12))
-                cv2.line(frame, pb, (tag_x + 90, tag_y - 8),
-                         (0, 255, 200), 2, cv2.LINE_AA)
-                cv2.rectangle(frame, (tag_x, tag_y - 32), (tag_x + 190, tag_y + 6),
-                              (12, 15, 22), -1)
-                cv2.rectangle(frame, (tag_x, tag_y - 32), (tag_x + 190, tag_y + 6),
-                              (0, 255, 200), 2)
-                cv2.putText(frame, f'{label_prefix}  {ang:.1f}deg', (tag_x + 8, tag_y - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 200), 2, cv2.LINE_AA)
-
-        callout('hip_r',  'right_shoulder', 'right_hip',  'right_knee',  'HIP-R',  60, -40)
-        callout('knee_r', 'right_hip',      'right_knee', 'right_ankle', 'KNEE-R', 60,  40)
-        callout('hip_l',  'left_shoulder',  'left_hip',   'left_knee',   'HIP-L', -160, -40)
-        callout('knee_l', 'left_hip',       'left_knee',  'left_ankle',  'KNEE-L', -160, 40)
+            if not (pa and pb and pc):
+                continue
+            ang = angle_at(pa, pb, pc)
+            angles[label] = ang
+            tx, ty = slots[label]
+            # leader line from joint to tag center-left
+            anchor = (tx + TAG_W // 2, ty - TAG_H // 2)
+            cv2.line(frame, pb, anchor, (0, 255, 200), 2, cv2.LINE_AA)
+            # filled background
+            cv2.rectangle(frame, (tx, ty - TAG_H), (tx + TAG_W, ty),
+                          (10, 13, 20), -1)
+            cv2.rectangle(frame, (tx, ty - TAG_H), (tx + TAG_W, ty),
+                          (0, 255, 200), 2)
+            cv2.putText(frame, f'{label}  {ang:.1f}deg',
+                        (tx + 8, ty - 11),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.62, (0, 255, 200), 2, cv2.LINE_AA)
         return angles
 
     def _update_pose_metrics(self, kps, angles, w, h):
@@ -872,6 +1006,15 @@ class JLVisionV10(QMainWindow):
         speed_ms  = dist_m / time_s
         speed_mph = speed_ms * 2.237
         self.m_sprint['Speed'].set(f'{speed_ms:.1f} m/s  {speed_mph:.1f} mph', '#00ffd0')
+
+    def _update_stride_metrics(self):
+        sd = self.stride_detector
+        if sd.stride_length_m is not None:
+            self.m_pending['Stride length'].set(
+                f'{sd.stride_length_m:.2f} m', '#00ffd0')
+        if sd.step_freq_hz is not None:
+            self.m_pending['Step frequency'].set(
+                f'{sd.step_freq_hz:.1f} steps/s', '#00ffd0')
 
     def _log_frame(self, cx, cy):
         entry = {
