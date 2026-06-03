@@ -314,6 +314,7 @@ class VideoCanvas(QLabel):
         self._boxes = []
         self._select_mode = True
         self._cal_mode = False
+        self._last_overlay = None   # stored so resizeEvent can re-scale
 
     # -- coordinate mapping --------------------------------------------------
 
@@ -327,18 +328,29 @@ class VideoCanvas(QLabel):
     def show_frame(self, bgr):
         if bgr is None:
             return
+        self._last_overlay = bgr
+        self._paint(bgr)
+
+    def _paint(self, bgr):
+        lw, lh = self.width(), self.height()
+        if lw < 2 or lh < 2:
+            return
         h, w = bgr.shape[:2]
         self._frame_w, self._frame_h = w, h
         rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
         qi = QImage(rgb.data, w, h, rgb.strides[0], QImage.Format_RGB888)
         pm = QPixmap.fromImage(qi)
-        lw, lh = self.width(), self.height()
         scaled = pm.scaled(lw, lh, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self._disp_w = scaled.width()
         self._disp_h = scaled.height()
         self._off_x = (lw - self._disp_w) // 2
         self._off_y = (lh - self._disp_h) // 2
         self.setPixmap(scaled)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._last_overlay is not None:
+            self._paint(self._last_overlay)
 
     # -- mouse ---------------------------------------------------------------
 
@@ -411,6 +423,11 @@ class JLVisionV10(QMainWindow):
         self.timer = QTimer()
         self.timer.timeout.connect(self._tick)
 
+        # Delay initial render until after the window is shown and laid out,
+        # so the canvas reports its true pixel size when scaling the first frame.
+        QTimer.singleShot(150, self._initial_load)
+
+    def _initial_load(self):
         self._seek(0)
         self._run_detection()
 
