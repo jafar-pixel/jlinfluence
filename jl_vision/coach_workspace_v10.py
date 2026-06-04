@@ -100,27 +100,29 @@ HEAT_LEVELS = [
     (0.55, '#FFB800'), (0.75, '#FF5500'), (0.90, '#FF0000'),
 ]
 
-# Maps internal muscle key → SVG element id in body_map.svg
-# Set up for the "Human Anatomy Component System" Figma community template
-# (View=Anterior, Dissection=Outer Muscles, Color=Yes — node 17:35227)
-# Figma exports layer names as hyphenated IDs, e.g. "Gluteus Maximus" → "Gluteus-Maximus"
+# Maps internal muscle key → (view, svg_element_id)
+# 'front' = body_map_front.svg  (Anterior)
+# 'back'  = body_map_back.svg   (Posterior)
+# Export from Figma "Human Anatomy Component System" community template:
+#   Front : node 17:38906  View=Anterior,  Dissection=Outter/Inner Muscles, Color=Yes
+#   Back  : node 17:39045  View=Posterior, Dissection=Outter/Inner Muscles, Color=Yes
 SVG_MUSCLE_IDS = {
-    # Bilateral muscles — both sides mapped to one element (max activation used)
-    'glute_r':      'Gluteus-Maximus',
-    'glute_l':      'Gluteus-Maximus',
-    'quad_r':       'Quadriceps',
-    'quad_l':       'Quadriceps',
-    'hamstring_r':  'Hamstrings',
-    'hamstring_l':  'Hamstrings',
-    'calf_r':       'Gastrocnemius',
-    'calf_l':       'Gastrocnemius',
-    'hip_flexor_r': 'Hip-Flexors',
-    'hip_flexor_l': 'Hip-Flexors',
-    'shoulder_r':   'Deltoid-Anterior',
-    'shoulder_l':   'Deltoid-Anterior',
-    # Midline muscles
-    'erector':      'Erector-Spinae',
-    'core':         'Rectus-Abdominis',
+    # ── Anterior view (body_map_front.svg) ─────────────────────────────────
+    'quad_r':       ('front', 'Quadriceps'),
+    'quad_l':       ('front', 'Quadriceps'),
+    'hip_flexor_r': ('front', 'Hip-Flexors'),
+    'hip_flexor_l': ('front', 'Hip-Flexors'),
+    'core':         ('front', 'Rectus-Abdominis'),
+    'shoulder_r':   ('front', 'Deltoid-Anterior'),
+    'shoulder_l':   ('front', 'Deltoid-Anterior'),
+    # ── Posterior view (body_map_back.svg) ──────────────────────────────────
+    'glute_r':      ('back',  'Gluteus-Maximus'),
+    'glute_l':      ('back',  'Gluteus-Maximus'),
+    'hamstring_r':  ('back',  'Hamstrings'),
+    'hamstring_l':  ('back',  'Hamstrings'),
+    'calf_r':       ('back',  'Gastrocnemius'),
+    'calf_l':       ('back',  'Gastrocnemius'),
+    'erector':      ('back',  'Erector-Spinae'),
 }
 
 # CNS co-activation chains: grouped muscles that fire together
@@ -459,24 +461,24 @@ def heat_color(level):
 
 
 # ------------------------------------------------------------------------------
-# Body Map widget
+# Body Map widget  (anterior + posterior side by side)
 # ------------------------------------------------------------------------------
 
 class BodyMapWidget(QWidget):
-    """SVG body map with heat-mapped muscle fills driven by POSE data."""
+    """Dual-view SVG body map — anterior left, posterior right — heat-mapped from POSE data."""
 
-    SVG_PATH = Path(__file__).parent / 'body_map.svg'
+    SVG_FRONT = Path(__file__).parent / 'body_map_front.svg'   # Anterior
+    SVG_BACK  = Path(__file__).parent / 'body_map_back.svg'    # Posterior
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet('background: #0d0f14;')
         self._activations = {}
-        self._svg_raw = None
-        self._ems_labels = {}
+        self._raw_front = self._raw_back = None
 
         col = QVBoxLayout(self)
-        col.setContentsMargins(6, 6, 6, 6)
-        col.setSpacing(6)
+        col.setContentsMargins(4, 4, 4, 4)
+        col.setSpacing(4)
 
         # Header
         hdr = QLabel('LIVE MUSCLE ACTIVATION')
@@ -484,30 +486,19 @@ class BodyMapWidget(QWidget):
         hdr.setAlignment(Qt.AlignCenter)
         col.addWidget(hdr)
 
-        # SVG viewer (or placeholder)
-        if _HAS_SVG:
-            self._svg_view = QSvgWidget()
-            self._svg_view.setMinimumHeight(220)
-            self._svg_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            col.addWidget(self._svg_view, 3)
-        else:
-            self._svg_view = None
+        # ── Two SVG views side by side ────────────────────────────────────
+        views = QHBoxLayout()
+        views.setSpacing(4)
 
-        self._placeholder = QLabel(
-            'Export  "View=Anterior, Outer Muscles, Color=Yes"\n'
-            'from the Human Anatomy Component System Figma template\n'
-            'and save as  jl_vision/body_map.svg\n\n'
-            'Expected SVG layer IDs (Figma export names):\n'
-            'Gluteus-Maximus  Quadriceps  Hamstrings\n'
-            'Gastrocnemius    Hip-Flexors  Deltoid-Anterior\n'
-            'Erector-Spinae   Rectus-Abdominis'
+        self._svg_front_view, self._ph_front = self._make_svg_panel(
+            views, 'ANTERIOR',
+            'body_map_front.svg\n(node 17:38906)'
         )
-        self._placeholder.setAlignment(Qt.AlignCenter)
-        self._placeholder.setStyleSheet(
-            'color: #445; font-size: 11px; background: #131820; '
-            'border: 1px dashed #00ffd025; border-radius: 6px; padding: 12px;')
-        self._placeholder.setWordWrap(True)
-        col.addWidget(self._placeholder, 3)
+        self._svg_back_view, self._ph_back = self._make_svg_panel(
+            views, 'POSTERIOR',
+            'body_map_back.svg\n(node 17:39045)'
+        )
+        col.addLayout(views, 3)
 
         # CNS chain bars
         col.addWidget(self._build_cns_section())
@@ -515,13 +506,50 @@ class BodyMapWidget(QWidget):
         # EMS / injury zones
         col.addWidget(self._build_ems_section())
 
-        # Load SVG
-        if self.SVG_PATH.exists():
-            with open(self.SVG_PATH, 'r', encoding='utf-8') as f:
-                self._svg_raw = f.read()
-            self._placeholder.hide()
-        elif self._svg_view:
-            self._svg_view.hide()
+        # Load SVGs
+        self._raw_front = self._load_svg(self.SVG_FRONT, self._svg_front_view, self._ph_front)
+        self._raw_back  = self._load_svg(self.SVG_BACK,  self._svg_back_view,  self._ph_back)
+
+    def _make_svg_panel(self, parent_layout, label_text, placeholder_text):
+        """Build one SVG panel (viewer + label + placeholder) and add to parent_layout."""
+        panel = QVBoxLayout()
+        panel.setSpacing(2)
+
+        if _HAS_SVG:
+            view = QSvgWidget()
+            view.setMinimumHeight(190)
+            view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            panel.addWidget(view, 1)
+        else:
+            view = None
+
+        ph = QLabel(placeholder_text)
+        ph.setAlignment(Qt.AlignCenter)
+        ph.setWordWrap(True)
+        ph.setStyleSheet(
+            'color: #334; font-size: 10px; background: #131820; '
+            'border: 1px dashed #00ffd020; border-radius: 4px; padding: 8px;')
+        ph.setMinimumHeight(190)
+        panel.addWidget(ph, 1)
+
+        lbl = QLabel(label_text)
+        lbl.setAlignment(Qt.AlignCenter)
+        lbl.setStyleSheet('color: #445; font-size: 10px; letter-spacing: 1px;')
+        panel.addWidget(lbl)
+
+        parent_layout.addLayout(panel, 1)
+        return view, ph
+
+    @staticmethod
+    def _load_svg(path, view, placeholder):
+        if path.exists():
+            with open(path, 'r', encoding='utf-8') as f:
+                raw = f.read()
+            placeholder.hide()
+            return raw
+        if view:
+            view.hide()
+        return None
 
     def _build_cns_section(self):
         grp = QGroupBox('CNS Activation Chains')
@@ -591,22 +619,26 @@ class BodyMapWidget(QWidget):
         self._refresh_ems()
 
     def _refresh_svg(self):
-        if not self._svg_raw or not self._svg_view:
-            return
-        # Aggregate bilateral muscles: multiple keys may share one SVG element
-        # Take the max activation so the dominant side drives the color
-        svg_levels = {}
-        for key, svg_id in SVG_MUSCLE_IDS.items():
+        # Aggregate per view: bilateral muscles → max activation
+        front_lvl, back_lvl = {}, {}
+        for key, (view, svg_id) in SVG_MUSCLE_IDS.items():
             level = self._activations.get(key, 0.0)
-            svg_levels[svg_id] = max(svg_levels.get(svg_id, 0.0), level)
-        rules = [
-            f'#{svg_id}{{fill:{heat_color(level)};'
-            f'fill-opacity:{0.35 + level * 0.60:.2f};}}'
-            for svg_id, level in svg_levels.items()
-        ]
-        style = '<style>' + ''.join(rules) + '</style>'
-        modified = re.sub(r'(<svg[^>]*>)', r'\1' + style, self._svg_raw, count=1)
-        self._svg_view.load(QByteArray(modified.encode('utf-8')))
+            target = front_lvl if view == 'front' else back_lvl
+            target[svg_id] = max(target.get(svg_id, 0.0), level)
+
+        self._apply_svg(self._raw_front, self._svg_front_view, front_lvl)
+        self._apply_svg(self._raw_back,  self._svg_back_view,  back_lvl)
+
+    @staticmethod
+    def _apply_svg(raw, widget, levels):
+        if not raw or not widget:
+            return
+        rules = ''.join(
+            f'#{sid}{{fill:{heat_color(l)};fill-opacity:{0.35 + l * 0.60:.2f};}}'
+            for sid, l in levels.items()
+        )
+        modified = re.sub(r'(<svg[^>]*>)', r'\1<style>' + rules + '</style>', raw, count=1)
+        widget.load(QByteArray(modified.encode('utf-8')))
 
     def _refresh_chains(self):
         for chain_name, muscles in CNS_CHAINS.items():
@@ -632,13 +664,13 @@ class BodyMapWidget(QWidget):
             if not lbl:
                 continue
             if level >= 0.90:
-                lbl.setText('MAX'); lbl.setStyleSheet('color:#FF0000;font-size:11px;font-weight:bold;')
+                lbl.setText('MAX');     lbl.setStyleSheet('color:#FF0000;font-size:11px;font-weight:bold;')
             elif level >= threshold:
                 lbl.setText('AT RISK'); lbl.setStyleSheet('color:#FF3D3D;font-size:11px;font-weight:bold;')
             elif level >= threshold * 0.85:
                 lbl.setText('MONITOR'); lbl.setStyleSheet('color:#FFB800;font-size:11px;font-weight:bold;')
             elif level >= 0.60:
-                lbl.setText('PEAK'); lbl.setStyleSheet('color:#FF5500;font-size:11px;font-weight:bold;')
+                lbl.setText('PEAK');    lbl.setStyleSheet('color:#FF5500;font-size:11px;font-weight:bold;')
             else:
                 lbl.setText('OPTIMAL'); lbl.setStyleSheet('color:#00E676;font-size:11px;font-weight:bold;')
 
