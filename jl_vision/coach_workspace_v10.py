@@ -101,14 +101,26 @@ HEAT_LEVELS = [
 ]
 
 # Maps internal muscle key → SVG element id in body_map.svg
+# Set up for the "Human Anatomy Component System" Figma community template
+# (View=Anterior, Dissection=Outer Muscles, Color=Yes — node 17:35227)
+# Figma exports layer names as hyphenated IDs, e.g. "Gluteus Maximus" → "Gluteus-Maximus"
 SVG_MUSCLE_IDS = {
-    'glute_r':      'glute-r',      'glute_l':      'glute-l',
-    'quad_r':       'quad-r',       'quad_l':       'quad-l',
-    'hamstring_r':  'hamstring-r',  'hamstring_l':  'hamstring-l',
-    'calf_r':       'calf-r',       'calf_l':       'calf-l',
-    'hip_flexor_r': 'hip-flexor-r', 'hip_flexor_l': 'hip-flexor-l',
-    'erector':      'erector',      'core':         'core',
-    'shoulder_r':   'shoulder-r',   'shoulder_l':   'shoulder-l',
+    # Bilateral muscles — both sides mapped to one element (max activation used)
+    'glute_r':      'Gluteus-Maximus',
+    'glute_l':      'Gluteus-Maximus',
+    'quad_r':       'Quadriceps',
+    'quad_l':       'Quadriceps',
+    'hamstring_r':  'Hamstrings',
+    'hamstring_l':  'Hamstrings',
+    'calf_r':       'Gastrocnemius',
+    'calf_l':       'Gastrocnemius',
+    'hip_flexor_r': 'Hip-Flexors',
+    'hip_flexor_l': 'Hip-Flexors',
+    'shoulder_r':   'Deltoid-Anterior',
+    'shoulder_l':   'Deltoid-Anterior',
+    # Midline muscles
+    'erector':      'Erector-Spinae',
+    'core':         'Rectus-Abdominis',
 }
 
 # CNS co-activation chains: grouped muscles that fire together
@@ -121,10 +133,10 @@ CNS_CHAINS = {
 
 # EMS / injury risk: (muscle_key, display_label, peak_threshold)
 EMS_ZONES = [
-    ('glute_r',      'Glute Max R',     0.80),
-    ('hamstring_r',  'Hamstring R',     0.75),
-    ('calf_r',       'Gastrocnemius R', 0.85),
-    ('hip_flexor_r', 'Hip Flexor R',    0.70),
+    ('glute_r',      'Gluteus Maximus',  0.80),
+    ('hamstring_r',  'Hamstrings',       0.75),
+    ('calf_r',       'Gastrocnemius',    0.85),
+    ('hip_flexor_r', 'Hip Flexors',      0.70),
 ]
 
 
@@ -581,10 +593,16 @@ class BodyMapWidget(QWidget):
     def _refresh_svg(self):
         if not self._svg_raw or not self._svg_view:
             return
+        # Aggregate bilateral muscles: multiple keys may share one SVG element
+        # Take the max activation so the dominant side drives the color
+        svg_levels = {}
+        for key, svg_id in SVG_MUSCLE_IDS.items():
+            level = self._activations.get(key, 0.0)
+            svg_levels[svg_id] = max(svg_levels.get(svg_id, 0.0), level)
         rules = [
-            f'#{svg_id}{{fill:{heat_color(self._activations.get(k, 0.0))};'
-            f'fill-opacity:{0.35 + self._activations.get(k, 0.0) * 0.60:.2f};}}'
-            for k, svg_id in SVG_MUSCLE_IDS.items()
+            f'#{svg_id}{{fill:{heat_color(level)};'
+            f'fill-opacity:{0.35 + level * 0.60:.2f};}}'
+            for svg_id, level in svg_levels.items()
         ]
         style = '<style>' + ''.join(rules) + '</style>'
         modified = re.sub(r'(<svg[^>]*>)', r'\1' + style, self._svg_raw, count=1)
