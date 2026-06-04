@@ -8,6 +8,7 @@ Install     : pip install PyQt5 tensorflow tensorflow-hub ultralytics opencv-pyt
 Usage       : python coach_workspace_v10.py videos/test_video.mp4
 """
 
+import re
 import sys
 import math
 import csv
@@ -25,9 +26,15 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton,
     QSlider, QHBoxLayout, QVBoxLayout, QGroupBox, QTextEdit,
     QFileDialog, QMessageBox, QInputDialog, QSizePolicy, QFrame,
+    QStackedWidget,
 )
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, QByteArray, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap, QFont
+try:
+    from PyQt5.QtSvg import QSvgWidget
+    _HAS_SVG = True
+except ImportError:
+    _HAS_SVG = False
 
 
 # ------------------------------------------------------------------------------
@@ -61,6 +68,40 @@ SKELETON_EDGES = [
     ('right_hip',      'right_knee'),
     ('left_knee',      'left_ankle'),
     ('right_knee',     'right_ankle'),
+]
+
+# ── Muscle heat-map ───────────────────────────────────────────────────────────
+# (threshold 0-1, hex color)  — REST → LOW → MED → HIGH → PEAK → MAX
+HEAT_LEVELS = [
+    (0.00, '#0033FF'), (0.15, '#00C8FF'), (0.35, '#00E676'),
+    (0.55, '#FFB800'), (0.75, '#FF5500'), (0.90, '#FF0000'),
+]
+
+# Maps internal muscle key → SVG element id in body_map.svg
+SVG_MUSCLE_IDS = {
+    'glute_r':      'glute-r',      'glute_l':      'glute-l',
+    'quad_r':       'quad-r',       'quad_l':       'quad-l',
+    'hamstring_r':  'hamstring-r',  'hamstring_l':  'hamstring-l',
+    'calf_r':       'calf-r',       'calf_l':       'calf-l',
+    'hip_flexor_r': 'hip-flexor-r', 'hip_flexor_l': 'hip-flexor-l',
+    'erector':      'erector',      'core':         'core',
+    'shoulder_r':   'shoulder-r',   'shoulder_l':   'shoulder-l',
+}
+
+# CNS co-activation chains: grouped muscles that fire together
+CNS_CHAINS = {
+    'Posterior': ['glute_r', 'glute_l', 'hamstring_r', 'hamstring_l', 'calf_r', 'calf_l'],
+    'Anterior':  ['quad_r', 'quad_l', 'hip_flexor_r', 'hip_flexor_l'],
+    'Core':      ['core', 'erector'],
+    'Lateral':   ['shoulder_r', 'shoulder_l'],
+}
+
+# EMS / injury risk: (muscle_key, display_label, peak_threshold)
+EMS_ZONES = [
+    ('glute_r',      'Glute Max R',     0.80),
+    ('hamstring_r',  'Hamstring R',     0.75),
+    ('calf_r',       'Gastrocnemius R', 0.85),
+    ('hip_flexor_r', 'Hip Flexor R',    0.70),
 ]
 
 
@@ -227,6 +268,248 @@ class StrideDetector:
         self._contacts = {'left': [], 'right': []}
         self.stride_length_m = None
         self.step_freq_hz = None
+
+
+# ------------------------------------------------------------------------------
+# Muscle activation engine
+# ------------------------------------------------------------------------------
+
+class MuscleActivation:
+    """Maps MoveNet keypoints + joint angles to per-muscle activation (0–1)."""
+
+    def __init__(self):
+        self._prev_ankle = {'left': None, 'right': None}
+
+    def compute(self, kps, angles, w, h):
+        hip_r  = angles.get('HIP-R',  180)
+        hip_l  = angles.get('HIP-L',  180)
+        knee_r = angles.get('KNEE-R', 180)
+        knee_l = angles.get('KNEE-L', 180)
+
+        act = {}
+        # Glutes — hip extension (large angle)
+        act['glute_r'] = self._norm(hip_r,  90, 175)
+        act['glute_l'] = self._norm(hip_l,  90, 175)
+        # Hip flexors — hip flexion (small angle → high activation)
+        act['hip_flexor_r'] = self._norm(175 - hip_r,  0, 85)
+        act['hip_flexor_l'] = self._norm(175 - hip_l,  0, 85)
+        # Quads — knee extension
+        act['quad_r'] = self._norm(knee_r, 90, 175)
+        act['quad_l'] = self._norm(knee_l, 90, 175)
+        # Hamstrings — knee flexion
+        act['hamstring_r'] = self._norm(175 - knee_r, 0, 85)
+        act['hamstring_l'] = self._norm(175 - knee_l, 0, 85)
+        # Calves — ankle vertical velocity
+        act['calf_r'] = self._ankle_act(kps, 'right', w, h)
+        act['calf_l'] = self._ankle_act(kps, 'left',  w, h)
+        # Core / erector — torso lean magnitude
+        torso = angles.get('TORSO_LEAN', 0.0)
+        act['core']    = min(1.0, torso / 35.0)
+        act['erector'] = min(1.0, torso / 25.0)
+        # Shoulders — keypoint confidence proxy
+        for side, key in (('right', 'shoulder_r'), ('left', 'shoulder_l')):
+            _, _, conf = kps[KP[f'{side}_shoulder']]
+            act[key] = float(conf) if conf > 0.4 else 0.0
+        return act
+
+    @staticmethod
+    def _norm(val, lo, hi):
+        return max(0.0, min(1.0, (val - lo) / (hi - lo + 1e-9)))
+
+    def _ankle_act(self, kps, side, w, h):
+        pt = kp_xy(kps, f'{side}_ankle', w, h, thresh=0.2)
+        prev = self._prev_ankle[side]
+        self._prev_ankle[side] = pt
+        if pt and prev:
+            return min(1.0, abs(pt[1] - prev[1]) / 20.0)
+        return 0.0
+
+
+def heat_color(level):
+    """Return hex color for activation level 0-1."""
+    for threshold, color in reversed(HEAT_LEVELS):
+        if level >= threshold:
+            return color
+    return HEAT_LEVELS[0][1]
+
+
+# ------------------------------------------------------------------------------
+# Body Map widget
+# ------------------------------------------------------------------------------
+
+class BodyMapWidget(QWidget):
+    """SVG body map with heat-mapped muscle fills driven by POSE data."""
+
+    SVG_PATH = Path(__file__).parent / 'body_map.svg'
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet('background: #0d0f14;')
+        self._activations = {}
+        self._svg_raw = None
+        self._ems_labels = {}
+
+        col = QVBoxLayout(self)
+        col.setContentsMargins(6, 6, 6, 6)
+        col.setSpacing(6)
+
+        # Header
+        hdr = QLabel('LIVE MUSCLE ACTIVATION')
+        hdr.setStyleSheet('color: #00ffd0; font-size: 11px; font-weight: bold; letter-spacing: 2px;')
+        hdr.setAlignment(Qt.AlignCenter)
+        col.addWidget(hdr)
+
+        # SVG viewer (or placeholder)
+        if _HAS_SVG:
+            self._svg_view = QSvgWidget()
+            self._svg_view.setMinimumHeight(220)
+            self._svg_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            col.addWidget(self._svg_view, 3)
+        else:
+            self._svg_view = None
+
+        self._placeholder = QLabel(
+            'Add body_map.svg to jl_vision/ folder\n'
+            'to enable live muscle heat-mapping.\n\n'
+            'SVG muscle path IDs:\n'
+            'glute-r  quad-r  hamstring-r  calf-r\n'
+            'glute-l  quad-l  hamstring-l  calf-l\n'
+            'hip-flexor-r  hip-flexor-l\n'
+            'erector  core  shoulder-r  shoulder-l'
+        )
+        self._placeholder.setAlignment(Qt.AlignCenter)
+        self._placeholder.setStyleSheet(
+            'color: #445; font-size: 11px; background: #131820; '
+            'border: 1px dashed #00ffd025; border-radius: 6px; padding: 12px;')
+        self._placeholder.setWordWrap(True)
+        col.addWidget(self._placeholder, 3)
+
+        # CNS chain bars
+        col.addWidget(self._build_cns_section())
+
+        # EMS / injury zones
+        col.addWidget(self._build_ems_section())
+
+        # Load SVG
+        if self.SVG_PATH.exists():
+            with open(self.SVG_PATH, 'r', encoding='utf-8') as f:
+                self._svg_raw = f.read()
+            self._placeholder.hide()
+        elif self._svg_view:
+            self._svg_view.hide()
+
+    def _build_cns_section(self):
+        grp = QGroupBox('CNS Activation Chains')
+        grp.setStyleSheet(
+            'QGroupBox { color: #00ffd0; font-size: 11px; font-weight: bold; '
+            'border: 1px solid #1a2035; border-radius: 6px; margin-top: 8px; padding-top: 8px; }'
+        )
+        v = QVBoxLayout(grp)
+        v.setSpacing(5)
+        self._chain_bars = {}
+        for chain_name in CNS_CHAINS:
+            row = QHBoxLayout()
+            lbl = QLabel(chain_name)
+            lbl.setStyleSheet('color: #7a8a9a; font-size: 11px;')
+            lbl.setFixedWidth(62)
+            bar = QLabel()
+            bar.setFixedHeight(8)
+            bar.setStyleSheet('background: #1a1f2e; border-radius: 4px;')
+            pct_lbl = QLabel('0%')
+            pct_lbl.setStyleSheet('color: #556; font-size: 11px;')
+            pct_lbl.setFixedWidth(30)
+            pct_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            row.addWidget(lbl)
+            row.addWidget(bar, 1)
+            row.addWidget(pct_lbl)
+            v.addLayout(row)
+            self._chain_bars[chain_name] = (bar, pct_lbl)
+        return grp
+
+    def _build_ems_section(self):
+        grp = QGroupBox('EMS / Injury Risk Zones')
+        grp.setStyleSheet(
+            'QGroupBox { color: #FFB800; font-size: 11px; font-weight: bold; '
+            'border: 1px solid #1a2035; border-radius: 6px; margin-top: 8px; padding-top: 8px; }'
+        )
+        v = QVBoxLayout(grp)
+        v.setSpacing(4)
+        self._ems_labels = {}
+        for muscle_key, label, threshold in EMS_ZONES:
+            row = QHBoxLayout()
+            name_lbl = QLabel(label)
+            name_lbl.setStyleSheet('color: #7a8a9a; font-size: 11px;')
+            name_lbl.setFixedWidth(110)
+            status_lbl = QLabel('OPTIMAL')
+            status_lbl.setStyleSheet('color: #00E676; font-size: 11px; font-weight: bold;')
+            status_lbl.setFixedWidth(70)
+            row.addWidget(name_lbl)
+            row.addWidget(status_lbl)
+            row.addStretch()
+            ems_btn = QPushButton('EMS')
+            ems_btn.setFixedSize(42, 22)
+            ems_btn.setStyleSheet(
+                'QPushButton { font-size: 10px; font-weight: bold; '
+                'background: #1a1020; border: 1px solid #FF3D3D40; '
+                'border-radius: 4px; color: #FF3D3D; padding: 0; }'
+                'QPushButton:hover { background: #FF3D3D; color: #0d0f14; }'
+            )
+            row.addWidget(ems_btn)
+            v.addLayout(row)
+            self._ems_labels[muscle_key] = status_lbl
+        return grp
+
+    def update_activations(self, activations):
+        self._activations = activations
+        self._refresh_svg()
+        self._refresh_chains()
+        self._refresh_ems()
+
+    def _refresh_svg(self):
+        if not self._svg_raw or not self._svg_view:
+            return
+        rules = [
+            f'#{svg_id}{{fill:{heat_color(self._activations.get(k, 0.0))};'
+            f'fill-opacity:{0.35 + self._activations.get(k, 0.0) * 0.60:.2f};}}'
+            for k, svg_id in SVG_MUSCLE_IDS.items()
+        ]
+        style = '<style>' + ''.join(rules) + '</style>'
+        modified = re.sub(r'(<svg[^>]*>)', r'\1' + style, self._svg_raw, count=1)
+        self._svg_view.load(QByteArray(modified.encode('utf-8')))
+
+    def _refresh_chains(self):
+        for chain_name, muscles in CNS_CHAINS.items():
+            vals = [self._activations.get(m, 0.0) for m in muscles]
+            avg = sum(vals) / len(vals) if vals else 0.0
+            pct = int(avg * 100)
+            color = heat_color(avg)
+            bar, lbl = self._chain_bars[chain_name]
+            stop = f'{avg:.3f}'
+            stop2 = f'{min(1.0, avg + 0.001):.3f}'
+            bar.setStyleSheet(
+                f'background: qlineargradient(x1:0,y1:0,x2:1,y2:0,'
+                f'stop:0 {color},stop:{stop} {color},'
+                f'stop:{stop2} #1a1f2e,stop:1 #1a1f2e);'
+                f'border-radius:4px;'
+            )
+            lbl.setText(f'{pct}%')
+
+    def _refresh_ems(self):
+        for muscle_key, _, threshold in EMS_ZONES:
+            level = self._activations.get(muscle_key, 0.0)
+            lbl = self._ems_labels.get(muscle_key)
+            if not lbl:
+                continue
+            if level >= 0.90:
+                lbl.setText('MAX'); lbl.setStyleSheet('color:#FF0000;font-size:11px;font-weight:bold;')
+            elif level >= threshold:
+                lbl.setText('AT RISK'); lbl.setStyleSheet('color:#FF3D3D;font-size:11px;font-weight:bold;')
+            elif level >= threshold * 0.85:
+                lbl.setText('MONITOR'); lbl.setStyleSheet('color:#FFB800;font-size:11px;font-weight:bold;')
+            elif level >= 0.60:
+                lbl.setText('PEAK'); lbl.setStyleSheet('color:#FF5500;font-size:11px;font-weight:bold;')
+            else:
+                lbl.setText('OPTIMAL'); lbl.setStyleSheet('color:#00E676;font-size:11px;font-weight:bold;')
 
 
 # ------------------------------------------------------------------------------
@@ -418,6 +701,10 @@ class JLVisionV10(QMainWindow):
 
         # session log (list of dicts, one per analyzed frame)
         self._session_log = []
+
+        # body map
+        self.muscle_act = MuscleActivation()
+        self._last_angles = {}
 
         self._build_ui()
         self._connect()
@@ -634,12 +921,70 @@ class JLVisionV10(QMainWindow):
 
     def _metrics_panel(self):
         w = QWidget()
-        w.setFixedWidth(360)
+        w.setFixedWidth(380)
         w.setStyleSheet('background: #0a0c12; border-left: 2px solid #00ffd030;')
         col = QVBoxLayout(w)
-        col.setContentsMargins(16, 16, 16, 16)
-        col.setSpacing(12)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(0)
 
+        # ── Tab bar ──────────────────────────────────────────────────────────
+        tab_bar = QWidget()
+        tab_bar.setFixedHeight(44)
+        tab_bar.setStyleSheet('background: #080a10; border-bottom: 1px solid #00ffd020;')
+        tab_row = QHBoxLayout(tab_bar)
+        tab_row.setContentsMargins(0, 0, 0, 0)
+        tab_row.setSpacing(0)
+
+        tab_style = (
+            'QPushButton { background: transparent; color: #445; font-size: 12px; '
+            'font-weight: bold; border: none; letter-spacing: 1px; '
+            'border-bottom: 2px solid transparent; }'
+            'QPushButton:checked { color: #00ffd0; border-bottom: 2px solid #00ffd0; }'
+            'QPushButton:hover { color: #8af; }'
+        )
+        self._tab_joint = QPushButton('JOINT METRICS')
+        self._tab_body  = QPushButton('BODY MAP')
+        for btn in (self._tab_joint, self._tab_body):
+            btn.setCheckable(True)
+            btn.setFixedHeight(44)
+            btn.setStyleSheet(tab_style)
+            tab_row.addWidget(btn)
+        self._tab_joint.setChecked(True)
+        col.addWidget(tab_bar)
+
+        # ── Stacked pages ────────────────────────────────────────────────────
+        self._panel_stack = QStackedWidget()
+
+        # Page 0: Joint Metrics
+        page_metrics = QWidget()
+        pm = QVBoxLayout(page_metrics)
+        pm.setContentsMargins(14, 14, 14, 14)
+        pm.setSpacing(10)
+        self._build_metrics_page(pm)
+
+        # Page 1: Body Map
+        page_body = QWidget()
+        pb = QVBoxLayout(page_body)
+        pb.setContentsMargins(6, 6, 6, 6)
+        pb.setSpacing(0)
+        self.body_map = BodyMapWidget()
+        pb.addWidget(self.body_map)
+
+        self._panel_stack.addWidget(page_metrics)
+        self._panel_stack.addWidget(page_body)
+        col.addWidget(self._panel_stack, 1)
+
+        self._tab_joint.clicked.connect(lambda: self._switch_tab(0))
+        self._tab_body.clicked.connect(lambda: self._switch_tab(1))
+
+        return w
+
+    def _switch_tab(self, idx):
+        self._panel_stack.setCurrentIndex(idx)
+        self._tab_joint.setChecked(idx == 0)
+        self._tab_body.setChecked(idx == 1)
+
+    def _build_metrics_page(self, col):
         def grp(title, rows):
             g = QGroupBox(title)
             v = QVBoxLayout(g)
@@ -656,7 +1001,7 @@ class JLVisionV10(QMainWindow):
             'Status', 'Frame', 'Box W x H', 'Center',
         ])
 
-        self.m_pose = grp('Pose Layer - MoveNet', [
+        self.m_pose = grp('Pose Layer — MoveNet', [
             'Pose', 'Hip R', 'Knee R', 'Hip L', 'Knee L', 'Torso lean',
         ])
 
@@ -666,18 +1011,18 @@ class JLVisionV10(QMainWindow):
         self.m_sprint['Speed'].pending()
         self.m_sprint['Calibration'].set('not set', '#f5a623')
 
-        self.m_pending = grp('Pending - v11', [
+        self.m_pending = grp('Stride / GCT', [
             'Stride length', 'Ground contact', 'Step frequency',
         ])
         for m in self.m_pending.values():
             m.pending()
 
-        # coach notes
+        # Coach notes
         ng = QGroupBox('Coach Notes')
         nv = QVBoxLayout(ng)
         self.notes = QTextEdit()
         self.notes.setPlaceholderText('Type coaching observations...')
-        self.notes.setFixedHeight(72)
+        self.notes.setFixedHeight(68)
         nv.addWidget(self.notes)
         nr = QHBoxLayout()
         self.btn_export = QPushButton('Export CSV')
@@ -689,16 +1034,14 @@ class JLVisionV10(QMainWindow):
         col.addStretch()
 
         # JL Pulse placeholder
-        pp = QGroupBox('JL Pulse - Not Connected')
+        pp = QGroupBox('JL Pulse — Not Connected')
         pp.setStyleSheet('QGroupBox { color: #f5a623; }')
         pv = QVBoxLayout(pp)
-        for lbl in ['Body map', 'Fatigue signal', 'Readiness']:
+        for lbl in ['Fatigue signal', 'Readiness', 'HRV']:
             m = MetricRow(lbl)
             m.pending()
             pv.addWidget(m)
         col.addWidget(pp)
-
-        return w
 
     # --------------------------------------------------------------------------
     # Signal wiring
@@ -1020,6 +1363,7 @@ class JLVisionV10(QMainWindow):
         l_sh = kp_xy(kps, 'left_shoulder', w, h)
         r_hp = kp_xy(kps, 'right_hip', w, h)
         l_hp = kp_xy(kps, 'left_hip', w, h)
+        lean = 0.0
         if all([r_sh, l_sh, r_hp, l_hp]):
             sh = ((r_sh[0] + l_sh[0]) // 2, (r_sh[1] + l_sh[1]) // 2)
             hp = ((r_hp[0] + l_hp[0]) // 2, (r_hp[1] + l_hp[1]) // 2)
@@ -1027,6 +1371,14 @@ class JLVisionV10(QMainWindow):
             lean = math.degrees(math.atan2(abs(dx), abs(dy) + 1e-9))
             direction = 'fwd' if dx > 0 else 'back'
             self.m_pose['Torso lean'].set(f'{lean:.1f} deg {direction}', '#00ffd0')
+
+        # Push to body map (runs whether or not body map tab is active)
+        angles['TORSO_LEAN'] = lean
+        activations = self.muscle_act.compute(kps, angles, w, h)
+        self.body_map.update_activations(activations)
+
+        # Store angles for CSV export
+        self._last_angles = angles
 
     def _update_speed(self):
         if self.pixels_per_meter is None:
@@ -1054,12 +1406,21 @@ class JLVisionV10(QMainWindow):
         if sd.step_freq_hz is not None:
             self.m_pending['Step frequency'].set(
                 f'{sd.step_freq_hz:.1f} steps/s', '#00ffd0')
+            # GCT estimate: sprinting duty factor ~0.30
+            stride_time = 1.0 / max(sd.step_freq_hz / 2.0, 0.1)
+            gct_ms = stride_time * 0.30 * 1000
+            self.m_pending['Ground contact'].set(f'{gct_ms:.0f} ms', '#00ffd0')
 
     def _log_frame(self, cx, cy):
+        a = self._last_angles
         entry = {
-            'frame': self.current_frame,
-            'cx': cx, 'cy': cy,
-            'hip_r': '', 'knee_r': '', 'hip_l': '', 'knee_l': '',
+            'frame':    self.current_frame,
+            'cx': cx,   'cy': cy,
+            'hip_r':    f"{a['HIP-R']:.1f}"  if 'HIP-R'  in a else '',
+            'knee_r':   f"{a['KNEE-R']:.1f}" if 'KNEE-R' in a else '',
+            'hip_l':    f"{a['HIP-L']:.1f}"  if 'HIP-L'  in a else '',
+            'knee_l':   f"{a['KNEE-L']:.1f}" if 'KNEE-L' in a else '',
+            'torso_lean': f"{a['TORSO_LEAN']:.1f}" if 'TORSO_LEAN' in a else '',
             'speed_ms': '',
         }
         self._session_log.append(entry)
@@ -1104,7 +1465,7 @@ class JLVisionV10(QMainWindow):
             self, 'Export Session CSV', 'jl_vision_session.csv', 'CSV (*.csv)')
         if not path:
             return
-        fields = ['frame', 'cx', 'cy', 'hip_r', 'knee_r', 'hip_l', 'knee_l', 'speed_ms']
+        fields = ['frame', 'cx', 'cy', 'hip_r', 'knee_r', 'hip_l', 'knee_l', 'torso_lean', 'speed_ms']
         with open(path, 'w', newline='') as f:
             w = csv.DictWriter(f, fieldnames=fields)
             w.writeheader()
