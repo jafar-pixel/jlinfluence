@@ -494,13 +494,13 @@ class BodyMapWidget(QWidget):
             self._svg_view = None
 
         self._placeholder = QLabel(
-            'Add body_map.svg to jl_vision/ folder\n'
-            'to enable live muscle heat-mapping.\n\n'
-            'SVG muscle path IDs:\n'
-            'glute-r  quad-r  hamstring-r  calf-r\n'
-            'glute-l  quad-l  hamstring-l  calf-l\n'
-            'hip-flexor-r  hip-flexor-l\n'
-            'erector  core  shoulder-r  shoulder-l'
+            'Export  "View=Anterior, Outer Muscles, Color=Yes"\n'
+            'from the Human Anatomy Component System Figma template\n'
+            'and save as  jl_vision/body_map.svg\n\n'
+            'Expected SVG layer IDs (Figma export names):\n'
+            'Gluteus-Maximus  Quadriceps  Hamstrings\n'
+            'Gastrocnemius    Hip-Flexors  Deltoid-Anterior\n'
+            'Erector-Spinae   Rectus-Abdominis'
         )
         self._placeholder.setAlignment(Qt.AlignCenter)
         self._placeholder.setStyleSheet(
