@@ -13,6 +13,10 @@ import sys
 import math
 import csv
 import time
+import json
+import queue
+import socket
+import threading
 from pathlib import Path
 from collections import deque
 
@@ -69,6 +73,25 @@ SKELETON_EDGES = [
     ('left_knee',      'left_ankle'),
     ('right_knee',     'right_ankle'),
 ]
+
+# ── ARKit / iPhone stream ─────────────────────────────────────────────────────
+
+ARKIT_PORT = 8765   # TCP port the PyQt5 app listens on; iPhone connects here
+
+# Apple Vision JointName → MoveNet keypoint name
+# Vision uses bottom-left origin (y flipped) — corrected in _apply_arkit_frame
+VISION_TO_MOVENET = {
+    'nose':          'nose',
+    'left_eye':      'left_eye',       'right_eye':      'right_eye',
+    'left_ear':      'left_ear',       'right_ear':      'right_ear',
+    'left_shoulder': 'left_shoulder',  'right_shoulder': 'right_shoulder',
+    'left_elbow':    'left_elbow',     'right_elbow':    'right_elbow',
+    'left_wrist':    'left_wrist',     'right_wrist':    'right_wrist',
+    'left_hip':      'left_hip',       'right_hip':      'right_hip',
+    'left_knee':     'left_knee',      'right_knee':     'right_knee',
+    'left_ankle':    'left_ankle',     'right_ankle':    'right_ankle',
+}
+
 
 # ── Muscle heat-map ───────────────────────────────────────────────────────────
 # (threshold 0-1, hex color)  — REST → LOW → MED → HIGH → PEAK → MAX
@@ -268,6 +291,96 @@ class StrideDetector:
         self._contacts = {'left': [], 'right': []}
         self.stride_length_m = None
         self.step_freq_hz = None
+
+
+# ------------------------------------------------------------------------------
+# ARKit TCP receiver
+# ------------------------------------------------------------------------------
+
+class ARKitReceiver:
+    """
+    Listens on TCP port ARKIT_PORT for newline-delimited JSON frames from the
+    JL Vision iOS companion app.  Runs on a daemon thread; thread-safe via queue.
+
+    Frame schema (sent by iOS app):
+    {
+      "timestamp": <float>,
+      "frameId":   <int>,
+      "source":    "<device name>",
+      "hasLiDAR":  <bool>,
+      "cameraPose": {"position": [x,y,z], "rotation": [qx,qy,qz,qw]},
+      "keypoints": {
+        "<movenet_name>": [y_norm, x_norm, confidence],   // 0-1 coords
+        ...
+      },
+      "depth": {"left_ankle": <meters>, "right_ankle": <meters>, ...}
+    }
+    """
+
+    def __init__(self, frame_queue):
+        self._queue   = frame_queue
+        self._running = False
+        self._sock    = None
+        self._thread  = threading.Thread(target=self._serve, daemon=True)
+        self.connected   = False
+        self.device_name = None
+
+    def start(self):
+        try:
+            self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._sock.bind(('0.0.0.0', ARKIT_PORT))
+            self._sock.listen(1)
+            self._running = True
+            self._thread.start()
+            return True
+        except OSError as e:
+            print(f'ARKit receiver bind failed: {e}')
+            return False
+
+    def stop(self):
+        self._running = False
+        if self._sock:
+            try: self._sock.close()
+            except OSError: pass
+
+    def _serve(self):
+        while self._running:
+            try:
+                conn, addr = self._sock.accept()
+                self.connected = True
+                print(f'iPhone connected: {addr}')
+                self._read_client(conn)
+                self.connected = False
+                self.device_name = None
+                print(f'iPhone disconnected: {addr}')
+            except OSError:
+                break
+
+    def _read_client(self, conn):
+        buf = b''
+        try:
+            while self._running:
+                chunk = conn.recv(8192)
+                if not chunk:
+                    break
+                buf += chunk
+                while b'\n' in buf:
+                    line, buf = buf.split(b'\n', 1)
+                    if not line.strip():
+                        continue
+                    try:
+                        frame = json.loads(line)
+                        if 'source' in frame:
+                            self.device_name = frame['source']
+                        try:
+                            self._queue.put_nowait(frame)
+                        except queue.Full:
+                            pass   # drop if processing is behind
+                    except json.JSONDecodeError:
+                        pass
+        finally:
+            conn.close()
 
 
 # ------------------------------------------------------------------------------
@@ -706,6 +819,12 @@ class JLVisionV10(QMainWindow):
         self.muscle_act = MuscleActivation()
         self._last_angles = {}
 
+        # ARKit / iPhone stream
+        self._arkit_queue  = queue.Queue(maxsize=4)
+        self._arkit_rx     = ARKitReceiver(self._arkit_queue)
+        self._arkit_active = False   # True when last render used ARKit data
+        self._arkit_rx.start()
+
         self._build_ui()
         self._connect()
 
@@ -765,10 +884,11 @@ class JLVisionV10(QMainWindow):
         row.addWidget(title)
         row.addStretch()
 
-        self.hdr_frame = QLabel('Frame: -')
-        self.hdr_speed = QLabel('Speed: 1x')
-        self.hdr_pose  = QLabel('Pose: -')
-        for lbl in [self.hdr_frame, self.hdr_speed, self.hdr_pose]:
+        self.hdr_frame  = QLabel('Frame: -')
+        self.hdr_speed  = QLabel('Speed: 1x')
+        self.hdr_pose   = QLabel('Pose: -')
+        self.hdr_arkit  = QLabel(f'ARKit: waiting :{ARKIT_PORT}')
+        for lbl in [self.hdr_frame, self.hdr_speed, self.hdr_pose, self.hdr_arkit]:
             lbl.setStyleSheet('color: #889; font-size: 14px;')
             row.addWidget(lbl)
             sep = QLabel('  |  ')
@@ -1091,10 +1211,83 @@ class JLVisionV10(QMainWindow):
         self.timer.stop()
 
     def _tick(self):
+        # Drain one ARKit frame if the iPhone is streaming
+        try:
+            arkit_frame = self._arkit_queue.get_nowait()
+            self._apply_arkit_frame(arkit_frame)
+        except queue.Empty:
+            pass
+
+        # Update ARKit status badge every tick
+        if self._arkit_rx.connected:
+            dev = self._arkit_rx.device_name or 'iPhone'
+            self.hdr_arkit.setText(f'ARKit: {dev}')
+            self.hdr_arkit.setStyleSheet('color: #00ffd0; font-size: 14px;')
+        else:
+            self.hdr_arkit.setText(f'ARKit: waiting :{ARKIT_PORT}')
+            self.hdr_arkit.setStyleSheet('color: #445; font-size: 14px;')
+
         if self.current_frame >= self.total_frames - 1:
             self._pause()
             return
         self._advance(1)
+
+    def _apply_arkit_frame(self, frame):
+        """Merge iPhone ARKit+Vision data into the existing pose pipeline."""
+        kps_dict = frame.get('keypoints', {})
+        if not kps_dict:
+            return
+
+        # Build (17, 3) float32 array in MoveNet layout [y_norm, x_norm, conf]
+        kps = np.zeros((17, 3), np.float32)
+        for vision_name, movenet_name in VISION_TO_MOVENET.items():
+            if movenet_name in kps_dict:
+                y_n, x_n, conf = kps_dict[movenet_name]
+                kps[KP[movenet_name]] = [float(y_n), float(x_n), float(conf)]
+
+        self.keypoints  = kps
+        self._arkit_active = True
+
+        # Derive a bounding box from the keypoints if no athlete is locked
+        if self.selected_box is None and self._current_bgr is not None:
+            h, w = self._current_bgr.shape[:2]
+            pts = [(int(kps[i, 1] * w), int(kps[i, 0] * h))
+                   for i in range(17) if kps[i, 2] > 0.2]
+            if pts:
+                xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
+                pad = 30
+                self.selected_box = (max(0, min(xs)-pad), max(0, min(ys)-pad),
+                                     min(w, max(xs)+pad), min(h, max(ys)+pad))
+                self.m_athlete['Status'].set('ARKit Lock', '#00ffd0')
+
+        # LiDAR depth → improve stride length accuracy
+        depth = frame.get('depth', {})
+        if depth and self._current_bgr is not None:
+            self._update_lidar_stride(kps, depth)
+
+        # If video is paused, force a re-render so live pose updates appear
+        if not self.playing and self._current_bgr is not None:
+            self._render(self._current_bgr)
+
+    def _update_lidar_stride(self, kps, depth):
+        """Use LiDAR ankle depth for real-world stride distance when available."""
+        la_depth = depth.get('left_ankle')
+        ra_depth = depth.get('right_ankle')
+        if la_depth and ra_depth and self._current_bgr is not None:
+            h, w = self._current_bgr.shape[:2]
+            la_x = kps[KP['left_ankle'], 1] * w
+            ra_x = kps[KP['right_ankle'], 1] * w
+            # Horizontal distance corrected by depth (simple trig)
+            dx_px = abs(la_x - ra_x)
+            avg_depth = (la_depth + ra_depth) / 2.0
+            if avg_depth > 0.3:   # sanity: at least 0.3 m from camera
+                # Estimate pixels-per-meter from LiDAR depth
+                fov_h_rad = math.radians(65)  # typical iPhone wide camera HFOV
+                ppm_lidar = w / (2 * avg_depth * math.tan(fov_h_rad / 2))
+                if ppm_lidar > 5:
+                    self.pixels_per_meter = ppm_lidar
+                    self.m_sprint['Calibration'].set(
+                        f'{ppm_lidar:.1f} px/m (LiDAR)', '#00ffd0')
 
     def _step(self, delta):
         self._pause()
@@ -1185,6 +1378,7 @@ class JLVisionV10(QMainWindow):
     def _render(self, bgr):
         if bgr is None:
             return
+        self._arkit_active = False   # reset; _apply_arkit_frame sets it True
         h, w = bgr.shape[:2]
         overlay = bgr.copy()
 
@@ -1249,10 +1443,12 @@ class JLVisionV10(QMainWindow):
                     self.stride_detector.update(
                         self.current_frame, kps, w, h, self.pixels_per_meter)
                     self._update_stride_metrics()
-                    self.hdr_pose.setText('Pose: Active')
+                    src = 'ARKit' if self._arkit_active else 'MoveNet'
+                    self.hdr_pose.setText(f'Pose: {src}')
                 else:
-                    self.hdr_pose.setText('Pose: Not found')
-                    self.m_pose['Pose'].set('Not found', '#f5a623')
+                    if not self._arkit_active:
+                        self.hdr_pose.setText('Pose: Not found')
+                        self.m_pose['Pose'].set('Not found', '#f5a623')
             else:
                 self.hdr_pose.setText('Pose: OFF')
 
@@ -1509,6 +1705,7 @@ class JLVisionV10(QMainWindow):
     def closeEvent(self, event):
         self.timer.stop()
         self.cap.release()
+        self._arkit_rx.stop()
         event.accept()
 
 
