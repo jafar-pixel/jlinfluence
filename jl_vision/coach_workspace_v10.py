@@ -679,35 +679,87 @@ class BodyMapWidget(QWidget):
 # Qt stylesheet
 # ------------------------------------------------------------------------------
 
+# ── visionOS header chip styles ── used in _header() and _tick() ────────────
+_CHIP_BASE = (
+    'font-size: 12px; font-weight: 600;'
+    'background: rgba(255, 255, 255, 22);'
+    'border: 1px solid rgba(255, 255, 255, 45);'
+    'border-radius: 12px; padding: 4px 12px;'
+)
+_CHIP_NORMAL = _CHIP_BASE + ' color: rgba(180, 210, 235, 200);'
+_CHIP_ACTIVE = _CHIP_BASE + ' color: #00ffd0;'
+_CHIP_WARN   = _CHIP_BASE + ' color: #f5a623;'
+
+# visionOS glass button shared style — used inside _controls() and _left_toolbar()
+_GLASS_BTN = (
+    'QPushButton {'
+    '  background: rgba(255,255,255,25);'
+    '  color: rgba(230,240,255,220);'
+    '  border: 1px solid rgba(255,255,255,45);'
+    '  border-radius: 18px;'
+    '  font-size: 13px; font-weight: 600;'
+    '}'
+    'QPushButton:hover  { background: rgba(255,255,255,52); }'
+    'QPushButton:pressed { background: rgba(255,255,255,80); }'
+    'QPushButton:checked {'
+    '  background: rgba(0,255,208,52); color: #00ffd0;'
+    '  border-color: rgba(0,255,208,110);'
+    '}'
+    'QPushButton:disabled { background: rgba(255,255,255,8); color: rgba(255,255,255,50); }'
+)
+
 STYLE = """
-* { font-family: "Segoe UI", Arial, sans-serif; }
-QMainWindow, QWidget { background: #0d0f14; color: #dde; }
-QLabel { color: #ccd; font-size: 13px; }
+* { font-family: "SF Pro Display", "Segoe UI", Arial, sans-serif; }
+QMainWindow, QWidget { background: #07080c; color: #e4eef8; }
+QLabel { color: #c4d8ea; font-size: 13px; }
 QPushButton {
-    background: #131820; color: #00ffd0;
-    border: 1px solid #00ffd0; border-radius: 5px;
-    padding: 5px 12px; font-size: 13px; font-weight: bold;
+    background: rgba(255,255,255,25);
+    color: rgba(230,240,255,220);
+    border: 1px solid rgba(255,255,255,45);
+    border-radius: 12px;
+    padding: 5px 14px; font-size: 13px; font-weight: 600;
 }
-QPushButton:hover  { background: #00ffd0; color: #0d0f14; }
-QPushButton:pressed { background: #00b89a; }
-QPushButton:checked { background: #00ffd0; color: #0d0f14; }
-QPushButton:disabled { border-color: #333; color: #444; }
-QSlider::groove:horizontal { background: #1a1f2e; height: 6px; border-radius: 3px; }
+QPushButton:hover  { background: rgba(255,255,255,52); }
+QPushButton:pressed { background: rgba(255,255,255,80); }
+QPushButton:checked {
+    background: rgba(0,255,208,52); color: #00ffd0;
+    border-color: rgba(0,255,208,110);
+}
+QPushButton:disabled {
+    background: rgba(255,255,255,8);
+    color: rgba(255,255,255,50);
+    border-color: rgba(255,255,255,18);
+}
+QSlider::groove:horizontal {
+    background: rgba(0,0,0,55); height: 12px; border-radius: 6px;
+}
 QSlider::handle:horizontal {
-    background: #00ffd0; width: 16px; height: 16px;
-    margin: -5px 0; border-radius: 8px;
+    background: white; width: 18px; height: 18px;
+    margin: -3px 0; border-radius: 9px;
+    border: 2px solid rgba(0,0,0,25);
 }
-QSlider::sub-page:horizontal { background: #00ffd0; border-radius: 3px; }
+QSlider::sub-page:horizontal {
+    background: rgba(255,255,255,160); border-radius: 6px;
+}
 QGroupBox {
-    border: 1px solid #222840; border-radius: 8px;
-    margin-top: 10px; padding-top: 10px;
-    font-size: 13px; color: #00ffd0; font-weight: bold;
+    border: 1px solid rgba(255,255,255,35);
+    border-radius: 16px;
+    margin-top: 12px; padding-top: 8px;
+    font-size: 12px; color: rgba(180,210,235,185); font-weight: bold;
+    background: rgba(12,14,22,185);
 }
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; }
+QGroupBox::title { subcontrol-origin: margin; left: 14px; padding: 0 6px; }
 QTextEdit {
-    background: #0a0c12; color: #aab; border: 1px solid #222840;
-    border-radius: 4px; padding: 6px; font-size: 13px;
+    background: rgba(0,0,0,85); color: #c4d8ea;
+    border: 1px solid rgba(255,255,255,38);
+    border-radius: 12px; padding: 8px; font-size: 13px;
 }
+QScrollBar:vertical { background: transparent; width: 5px; margin: 0; }
+QScrollBar::handle:vertical {
+    background: rgba(255,255,255,45); border-radius: 2px; min-height: 20px;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; border: none; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 """
 
 
@@ -895,6 +947,7 @@ class JLVisionV10(QMainWindow):
 
     def _build_ui(self):
         root_widget = QWidget()
+        root_widget.setStyleSheet('background: #07080c;')
         self.setCentralWidget(root_widget)
         root = QHBoxLayout(root_widget)
         root.setContentsMargins(0, 0, 0, 0)
@@ -903,8 +956,8 @@ class JLVisionV10(QMainWindow):
         root.addWidget(self._left_toolbar())
 
         center = QVBoxLayout()
-        center.setContentsMargins(4, 4, 4, 4)
-        center.setSpacing(4)
+        center.setContentsMargins(0, 0, 0, 0)
+        center.setSpacing(0)
         center.addWidget(self._header())
 
         self.canvas = VideoCanvas()
@@ -924,26 +977,39 @@ class JLVisionV10(QMainWindow):
 
     def _header(self):
         w = QWidget()
-        w.setFixedHeight(58)
-        w.setStyleSheet('background: #080a10; border-bottom: 2px solid #00ffd020;')
+        w.setFixedHeight(68)
+        w.setStyleSheet(
+            'QWidget { background: rgba(10, 12, 20, 215);'
+            ' border-bottom: 1px solid rgba(255,255,255,28); }'
+        )
         row = QHBoxLayout(w)
-        row.setContentsMargins(20, 0, 20, 0)
+        row.setContentsMargins(20, 10, 20, 10)
+        row.setSpacing(10)
 
-        title = QLabel('JL VISION   Coach Workspace  v10')
-        title.setStyleSheet('color: #00ffd0; font-size: 18px; font-weight: bold; letter-spacing: 2px;')
-        row.addWidget(title)
+        # Logo badge
+        logo = QLabel('JL VISION')
+        logo.setStyleSheet(
+            'color: #00ffd0; font-size: 17px; font-weight: 700; letter-spacing: 3px;'
+            'background: rgba(0,255,208,18); border: 1px solid rgba(0,255,208,65);'
+            'border-radius: 14px; padding: 5px 14px;'
+        )
+        sub = QLabel('Coach Workspace  v10')
+        sub.setStyleSheet(
+            'color: rgba(190,215,240,160); font-size: 14px;'
+            'background: transparent; border: none;'
+        )
+        row.addWidget(logo)
+        row.addWidget(sub)
         row.addStretch()
 
-        self.hdr_frame  = QLabel('Frame: -')
-        self.hdr_speed  = QLabel('Speed: 1x')
-        self.hdr_pose   = QLabel('Pose: -')
-        self.hdr_arkit  = QLabel(f'ARKit: waiting :{ARKIT_PORT}')
-        for lbl in [self.hdr_frame, self.hdr_speed, self.hdr_pose, self.hdr_arkit]:
-            lbl.setStyleSheet('color: #889; font-size: 14px;')
-            row.addWidget(lbl)
-            sep = QLabel('  |  ')
-            sep.setStyleSheet('color: #334; font-size: 14px;')
-            row.addWidget(sep)
+        # Status chips
+        self.hdr_frame  = QLabel('Frame: —')
+        self.hdr_speed  = QLabel('1×')
+        self.hdr_pose   = QLabel('Pose: —')
+        self.hdr_arkit  = QLabel(f'ARKit  :{ARKIT_PORT}')
+        for chip in [self.hdr_frame, self.hdr_speed, self.hdr_pose, self.hdr_arkit]:
+            chip.setStyleSheet(_CHIP_NORMAL)
+            row.addWidget(chip)
 
         return w
 
@@ -951,174 +1017,230 @@ class JLVisionV10(QMainWindow):
 
     def _left_toolbar(self):
         w = QWidget()
-        w.setFixedWidth(160)
-        w.setStyleSheet('background: #080a10; border-right: 2px solid #00ffd030;')
+        w.setFixedWidth(72)
+        w.setStyleSheet(
+            'QWidget { background: rgba(10,12,20,215);'
+            ' border-right: 1px solid rgba(255,255,255,28); }'
+        )
         col = QVBoxLayout(w)
-        col.setContentsMargins(10, 18, 10, 18)
-        col.setSpacing(8)
+        col.setContentsMargins(10, 16, 10, 16)
+        col.setSpacing(6)
         col.setAlignment(Qt.AlignTop)
 
-        # Section label
-        lbl = QLabel('TOOLS')
-        lbl.setStyleSheet('color: #556; font-size: 12px; font-weight: bold; letter-spacing: 3px;')
-        lbl.setAlignment(Qt.AlignCenter)
-        col.addWidget(lbl)
-        col.addSpacing(6)
+        _TOOL_ICONS = {
+            'Select': '↖', 'Line': '╱', 'Angle': '∠', 'Circle': '○',
+            'Dot': '·', 'Arrow': '→', 'Text': 'T', 'Draw': '✏', 'Erase': '⌫',
+        }
+        _circle_btn = (
+            'QPushButton {'
+            '  background: rgba(255,255,255,22); color: rgba(210,228,250,210);'
+            '  border: 1px solid rgba(255,255,255,42); border-radius: 26px;'
+            '  font-size: 16px; font-weight: 600; padding: 0;'
+            '}'
+            'QPushButton:hover  { background: rgba(255,255,255,50); }'
+            'QPushButton:checked {'
+            '  background: rgba(0,255,208,55); color: #00ffd0;'
+            '  border-color: rgba(0,255,208,110);'
+            '}'
+        )
 
         self._tool_btns = {}
         for name in ['Select', 'Line', 'Angle', 'Circle', 'Dot', 'Arrow', 'Text', 'Draw', 'Erase']:
-            btn = QPushButton(name)
-            btn.setFixedSize(140, 44)
+            btn = QPushButton(_TOOL_ICONS.get(name, name[:2]))
+            btn.setFixedSize(52, 52)
             btn.setCheckable(True)
-            btn.setStyleSheet(
-                'QPushButton { font-size: 14px; font-weight: bold; text-align: left; padding-left: 14px; }'
-                'QPushButton:checked { background: #00ffd0; color: #0d0f14; }'
-            )
-            col.addWidget(btn)
+            btn.setToolTip(name)
+            btn.setStyleSheet(_circle_btn)
+            col.addWidget(btn, 0, Qt.AlignHCenter)
             self._tool_btns[name] = btn
 
         self._tool_btns['Select'].setChecked(True)
-
         col.addStretch()
 
-        # Divider
         line = QFrame()
         line.setFrameShape(QFrame.HLine)
-        line.setStyleSheet('color: #1a2035;')
+        line.setStyleSheet('color: rgba(255,255,255,30);')
         col.addWidget(line)
-        col.addSpacing(6)
+        col.addSpacing(4)
 
-        self.btn_cal = QPushButton('Calibrate')
-        self.btn_cal.setFixedSize(140, 44)
+        self.btn_cal = QPushButton('⊕')
+        self.btn_cal.setFixedSize(52, 52)
+        self.btn_cal.setToolTip('Calibrate — click 2 points with known real-world distance')
         self.btn_cal.setStyleSheet(
-            'QPushButton { font-size: 14px; font-weight: bold; '
-            'background: #0d1a16; border: 1px solid #00ffd0; border-radius: 5px; color: #00ffd0; }'
-            'QPushButton:hover { background: #00ffd0; color: #0d0f14; }'
+            'QPushButton {'
+            '  background: rgba(0,255,208,22); border: 1px solid rgba(0,255,208,85);'
+            '  border-radius: 26px; color: #00ffd0; font-size: 20px; font-weight: bold;'
+            '}'
+            'QPushButton:hover { background: rgba(0,255,208,55); }'
         )
-        self.btn_cal.setToolTip('Click 2 points with known real-world distance')
-        col.addWidget(self.btn_cal)
+        col.addWidget(self.btn_cal, 0, Qt.AlignHCenter)
 
         return w
 
     # -- playback controls ----------------------------------------------------
 
     def _controls(self):
-        w = QWidget()
-        w.setFixedHeight(120)
-        w.setStyleSheet('background: #080a10; border-top: 2px solid #00ffd020;')
-        col = QVBoxLayout(w)
-        col.setContentsMargins(16, 8, 16, 8)
+        outer = QWidget()
+        outer.setFixedHeight(130)
+        outer.setStyleSheet(
+            'QWidget { background: rgba(10,12,20,215);'
+            ' border-top: 1px solid rgba(255,255,255,28); }'
+        )
+        outer_col = QVBoxLayout(outer)
+        outer_col.setContentsMargins(16, 8, 16, 8)
+        outer_col.setSpacing(0)
+
+        # ── visionOS glass pill ───────────────────────────────────────────────
+        pill = QWidget()
+        pill.setStyleSheet(
+            'QWidget {'
+            '  background: rgba(18,20,32,210);'
+            '  border: 1px solid rgba(255,255,255,40);'
+            '  border-radius: 48px;'
+            '}'
+        )
+        col = QVBoxLayout(pill)
+        col.setContentsMargins(28, 10, 28, 10)
         col.setSpacing(8)
 
-        # scrubber row
+        # ── Scrubber row ──────────────────────────────────────────────────────
         scr_row = QHBoxLayout()
+        scr_row.setSpacing(10)
         self._lbl_pos = QLabel('0')
-        self._lbl_pos.setStyleSheet('color: #667; font-size: 13px; min-width: 40px;')
-        self._lbl_pos.setAlignment(Qt.AlignRight)
+        self._lbl_pos.setStyleSheet(
+            'color: rgba(190,215,240,170); font-size: 12px; min-width: 44px;'
+            'background: transparent; border: none;'
+        )
+        self._lbl_pos.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.scrubber = QSlider(Qt.Horizontal)
         self.scrubber.setRange(0, max(self.total_frames - 1, 1))
         self._lbl_total = QLabel(str(self.total_frames))
-        self._lbl_total.setStyleSheet('color: #667; font-size: 13px; min-width: 48px;')
+        self._lbl_total.setStyleSheet(
+            'color: rgba(190,215,240,170); font-size: 12px; min-width: 52px;'
+            'background: transparent; border: none;'
+        )
         scr_row.addWidget(self._lbl_pos)
         scr_row.addWidget(self.scrubber, 1)
         scr_row.addWidget(self._lbl_total)
         col.addLayout(scr_row)
 
-        # --- Row 1: transport ---
+        # ── Transport + speed + tool toggles row ──────────────────────────────
         transport = QHBoxLayout()
-        transport.setSpacing(8)
+        transport.setSpacing(6)
 
-        self.btn_p10  = QPushButton('<< -10')
-        self.btn_p1   = QPushButton('< -1')
-        self.btn_play = QPushButton('> Play')
+        self.btn_p10  = QPushButton('⏮ 10')
+        self.btn_p1   = QPushButton('◀ 1')
+        self.btn_play = QPushButton('▶')
         self.btn_play.setCheckable(True)
-        self.btn_play.setMinimumWidth(100)
-        self.btn_n1   = QPushButton('+1 >')
-        self.btn_n10  = QPushButton('+10 >>')
-        for b in [self.btn_p10, self.btn_p1, self.btn_play, self.btn_n1, self.btn_n10]:
-            b.setFixedHeight(38)
+        self.btn_n1   = QPushButton('1 ▶')
+        self.btn_n10  = QPushButton('10 ⏭')
+
+        for b in [self.btn_p10, self.btn_p1, self.btn_n1, self.btn_n10]:
+            b.setFixedSize(72, 38)
+            b.setStyleSheet(_GLASS_BTN)
+
+        self.btn_play.setFixedSize(78, 46)
+        self.btn_play.setStyleSheet(
+            'QPushButton {'
+            '  background: rgba(255,255,255,38); color: white;'
+            '  border: 1px solid rgba(255,255,255,65); border-radius: 23px;'
+            '  font-size: 20px; font-weight: bold;'
+            '}'
+            'QPushButton:hover { background: rgba(255,255,255,65); }'
+            'QPushButton:checked {'
+            '  background: rgba(0,255,208,55); color: #00ffd0;'
+            '  border-color: rgba(0,255,208,120);'
+            '}'
+        )
 
         transport.addWidget(self.btn_p10)
         transport.addWidget(self.btn_p1)
         transport.addWidget(self.btn_play)
         transport.addWidget(self.btn_n1)
         transport.addWidget(self.btn_n10)
-        transport.addStretch()
+        transport.addSpacing(14)
 
-        spd_lbl = QLabel('Speed:')
-        spd_lbl.setStyleSheet('color: #778; font-size: 13px;')
-        transport.addWidget(spd_lbl)
         self._spd_btns = {}
-        for label, val in [('1x', 1.0), ('1/2x', 0.5), ('1/4x', 0.25), ('1/8x', 0.125)]:
+        for label, val in [('1×', 1.0), ('½×', 0.5), ('¼×', 0.25), ('⅛×', 0.125)]:
             b = QPushButton(label)
-            b.setFixedSize(52, 38)
+            b.setFixedSize(50, 38)
             b.setCheckable(True)
             b.setChecked(val == 1.0)
+            b.setStyleSheet(_GLASS_BTN)
             transport.addWidget(b)
             self._spd_btns[val] = b
 
-        col.addLayout(transport)
+        transport.addSpacing(14)
 
-        # --- Row 2: tools ---
-        tools = QHBoxLayout()
-        tools.setSpacing(8)
-
-        self.btn_inference = QPushButton('Pose ON')
+        self.btn_inference = QPushButton('Pose')
         self.btn_inference.setCheckable(True)
         self.btn_inference.setChecked(True)
-        self.btn_inference.setFixedHeight(34)
-
-        self.btn_detect   = QPushButton('Detect Athletes')
-        self.btn_detect.setFixedHeight(34)
-
+        self.btn_detect   = QPushButton('Detect')
         self.btn_reselect = QPushButton('Reselect')
-        self.btn_reselect.setFixedHeight(34)
+        for b in [self.btn_inference, self.btn_detect, self.btn_reselect]:
+            b.setFixedHeight(38)
+            b.setStyleSheet(_GLASS_BTN)
+            transport.addWidget(b)
 
-        tools.addWidget(self.btn_inference)
-        tools.addWidget(self.btn_detect)
-        tools.addWidget(self.btn_reselect)
-        tools.addStretch()
+        transport.addStretch()
 
-        hint = QLabel('Space play/pause  |  < > step  |  1 2 4 8 speed  |  wheel = frame  |  Esc quit')
-        hint.setStyleSheet('color: #445; font-size: 11px;')
-        tools.addWidget(hint)
+        hint = QLabel('Space · play/pause  |  ← → step  |  scroll = frame')
+        hint.setStyleSheet(
+            'color: rgba(150,175,200,120); font-size: 11px;'
+            'background: transparent; border: none;'
+        )
+        transport.addWidget(hint)
+        col.addLayout(transport)
 
-        col.addLayout(tools)
-
-        return w
+        outer_col.addWidget(pill)
+        return outer
 
     # -- metrics panel --------------------------------------------------------
 
     def _metrics_panel(self):
         w = QWidget()
-        w.setFixedWidth(380)
-        w.setStyleSheet('background: #0a0c12; border-left: 2px solid #00ffd030;')
+        w.setFixedWidth(390)
+        w.setStyleSheet(
+            'QWidget { background: rgba(10,12,20,215);'
+            ' border-left: 1px solid rgba(255,255,255,28); }'
+        )
         col = QVBoxLayout(w)
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(0)
 
         # ── Tab bar ──────────────────────────────────────────────────────────
         tab_bar = QWidget()
-        tab_bar.setFixedHeight(44)
-        tab_bar.setStyleSheet('background: #080a10; border-bottom: 1px solid #00ffd020;')
+        tab_bar.setFixedHeight(52)
+        tab_bar.setStyleSheet(
+            'QWidget { background: rgba(14,16,26,220);'
+            ' border-bottom: 1px solid rgba(255,255,255,30); }'
+        )
         tab_row = QHBoxLayout(tab_bar)
-        tab_row.setContentsMargins(0, 0, 0, 0)
-        tab_row.setSpacing(0)
+        tab_row.setContentsMargins(12, 8, 12, 0)
+        tab_row.setSpacing(6)
 
         tab_style = (
-            'QPushButton { background: transparent; color: #445; font-size: 12px; '
-            'font-weight: bold; border: none; letter-spacing: 1px; '
-            'border-bottom: 2px solid transparent; }'
-            'QPushButton:checked { color: #00ffd0; border-bottom: 2px solid #00ffd0; }'
-            'QPushButton:hover { color: #8af; }'
+            'QPushButton {'
+            '  background: transparent; color: rgba(150,175,210,160);'
+            '  font-size: 11px; font-weight: 700; border: none;'
+            '  letter-spacing: 1px; border-radius: 0;'
+            '  border-bottom: 2px solid transparent;'
+            '  padding: 6px 12px;'
+            '}'
+            'QPushButton:checked {'
+            '  color: #00ffd0;'
+            '  border-bottom: 2px solid #00ffd0;'
+            '}'
+            'QPushButton:hover { color: rgba(180,220,255,200); }'
         )
         self._tab_joint = QPushButton('JOINT METRICS')
         self._tab_body  = QPushButton('BODY MAP')
         for btn in (self._tab_joint, self._tab_body):
             btn.setCheckable(True)
-            btn.setFixedHeight(44)
+            btn.setFixedHeight(52)
             btn.setStyleSheet(tab_style)
             tab_row.addWidget(btn)
+        tab_row.addStretch()
         self._tab_joint.setChecked(True)
         col.addWidget(tab_bar)
 
@@ -1251,13 +1373,13 @@ class JLVisionV10(QMainWindow):
     def _play(self):
         self.playing = True
         self.btn_play.setChecked(True)
-        self.btn_play.setText('|| Pause')
+        self.btn_play.setText('⏸')
         self.timer.start(max(int(1000 / (self.fps * self.speed)), 16))
 
     def _pause(self):
         self.playing = False
         self.btn_play.setChecked(False)
-        self.btn_play.setText('> Play')
+        self.btn_play.setText('▶')
         self.timer.stop()
 
     def _tick(self):
@@ -1271,11 +1393,11 @@ class JLVisionV10(QMainWindow):
         # Update ARKit status badge every tick
         if self._arkit_rx.connected:
             dev = self._arkit_rx.device_name or 'iPhone'
-            self.hdr_arkit.setText(f'ARKit: {dev}')
-            self.hdr_arkit.setStyleSheet('color: #00ffd0; font-size: 14px;')
+            self.hdr_arkit.setText(f'ARKit  {dev}')
+            self.hdr_arkit.setStyleSheet(_CHIP_ACTIVE)
         else:
-            self.hdr_arkit.setText(f'ARKit: waiting :{ARKIT_PORT}')
-            self.hdr_arkit.setStyleSheet('color: #445; font-size: 14px;')
+            self.hdr_arkit.setText(f'ARKit  :{ARKIT_PORT}')
+            self.hdr_arkit.setStyleSheet(_CHIP_NORMAL)
 
         if self.current_frame >= self.total_frames - 1:
             self._pause()
@@ -1368,7 +1490,7 @@ class JLVisionV10(QMainWindow):
 
     def _set_speed(self, v):
         self.speed = v
-        self.hdr_speed.setText(f'Speed: {v}x')
+        self.hdr_speed.setText(f'{v}×')
         for sv, btn in self._spd_btns.items():
             btn.setChecked(sv == v)
         if self.playing:
