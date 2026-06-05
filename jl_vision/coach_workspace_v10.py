@@ -1003,10 +1003,10 @@ class JLVisionV10(QMainWindow):
         row.addStretch()
 
         # Status chips
-        self.hdr_frame  = QLabel('Frame: —')
-        self.hdr_speed  = QLabel('1×')
-        self.hdr_pose   = QLabel('Pose: —')
-        self.hdr_arkit  = QLabel(f'ARKit  :{ARKIT_PORT}')
+        self.hdr_frame  = QLabel('Frame: -')
+        self.hdr_speed  = QLabel('1x')
+        self.hdr_pose   = QLabel('Pose: -')
+        self.hdr_arkit  = QLabel(f'ARKit :{ARKIT_PORT}')
         for chip in [self.hdr_frame, self.hdr_speed, self.hdr_pose, self.hdr_arkit]:
             chip.setStyleSheet(_CHIP_NORMAL)
             row.addWidget(chip)
@@ -1028,8 +1028,8 @@ class JLVisionV10(QMainWindow):
         col.setAlignment(Qt.AlignTop)
 
         _TOOL_ICONS = {
-            'Select': '↖', 'Line': '╱', 'Angle': '∠', 'Circle': '○',
-            'Dot': '·', 'Arrow': '→', 'Text': 'T', 'Draw': '✏', 'Erase': '⌫',
+            'Select': 'Sel', 'Line': 'Ln', 'Angle': 'Ang', 'Circle': 'Cir',
+            'Dot': 'Dot', 'Arrow': 'Arr', 'Text': 'T', 'Draw': 'Pen', 'Erase': 'Del',
         }
         _circle_btn = (
             'QPushButton {'
@@ -1063,9 +1063,9 @@ class JLVisionV10(QMainWindow):
         col.addWidget(line)
         col.addSpacing(4)
 
-        self.btn_cal = QPushButton('⊕')
+        self.btn_cal = QPushButton('Cal')
         self.btn_cal.setFixedSize(52, 52)
-        self.btn_cal.setToolTip('Calibrate — click 2 points with known real-world distance')
+        self.btn_cal.setToolTip('Calibrate - click 2 points with known real-world distance')
         self.btn_cal.setStyleSheet(
             'QPushButton {'
             '  background: rgba(0,255,208,22); border: 1px solid rgba(0,255,208,85);'
@@ -1128,12 +1128,12 @@ class JLVisionV10(QMainWindow):
         transport = QHBoxLayout()
         transport.setSpacing(6)
 
-        self.btn_p10  = QPushButton('⏮ 10')
-        self.btn_p1   = QPushButton('◀ 1')
-        self.btn_play = QPushButton('▶')
+        self.btn_p10  = QPushButton('<< 10')
+        self.btn_p1   = QPushButton('< 1')
+        self.btn_play = QPushButton('>')
         self.btn_play.setCheckable(True)
-        self.btn_n1   = QPushButton('1 ▶')
-        self.btn_n10  = QPushButton('10 ⏭')
+        self.btn_n1   = QPushButton('1 >')
+        self.btn_n10  = QPushButton('10 >>')
 
         for b in [self.btn_p10, self.btn_p1, self.btn_n1, self.btn_n10]:
             b.setFixedSize(72, 38)
@@ -1161,7 +1161,7 @@ class JLVisionV10(QMainWindow):
         transport.addSpacing(14)
 
         self._spd_btns = {}
-        for label, val in [('1×', 1.0), ('½×', 0.5), ('¼×', 0.25), ('⅛×', 0.125)]:
+        for label, val in [('1x', 1.0), ('.5x', 0.5), ('.25x', 0.25), ('.125x', 0.125)]:
             b = QPushButton(label)
             b.setFixedSize(50, 38)
             b.setCheckable(True)
@@ -1184,7 +1184,7 @@ class JLVisionV10(QMainWindow):
 
         transport.addStretch()
 
-        hint = QLabel('Space · play/pause  |  ← → step  |  scroll = frame')
+        hint = QLabel('Space = play/pause  |  arrow keys = step  |  scroll = frame')
         hint.setStyleSheet(
             'color: rgba(150,175,200,120); font-size: 11px;'
             'background: transparent; border: none;'
@@ -1293,7 +1293,7 @@ class JLVisionV10(QMainWindow):
             'Status', 'Frame', 'Box W x H', 'Center',
         ])
 
-        self.m_pose = grp('Pose Layer — MoveNet', [
+        self.m_pose = grp('Pose Layer - MoveNet', [
             'Pose', 'Hip R', 'Knee R', 'Hip L', 'Knee L', 'Torso lean',
         ])
 
@@ -1326,7 +1326,7 @@ class JLVisionV10(QMainWindow):
         col.addStretch()
 
         # JL Pulse placeholder
-        pp = QGroupBox('JL Pulse — Not Connected')
+        pp = QGroupBox('JL Pulse - Not Connected')
         pp.setStyleSheet('QGroupBox { color: #f5a623; }')
         pv = QVBoxLayout(pp)
         for lbl in ['Fatigue signal', 'Readiness', 'HRV']:
@@ -1373,13 +1373,13 @@ class JLVisionV10(QMainWindow):
     def _play(self):
         self.playing = True
         self.btn_play.setChecked(True)
-        self.btn_play.setText('⏸')
+        self.btn_play.setText('||')
         self.timer.start(max(int(1000 / (self.fps * self.speed)), 16))
 
     def _pause(self):
         self.playing = False
         self.btn_play.setChecked(False)
-        self.btn_play.setText('▶')
+        self.btn_play.setText('>')
         self.timer.stop()
 
     def _tick(self):
@@ -1396,7 +1396,7 @@ class JLVisionV10(QMainWindow):
             self.hdr_arkit.setText(f'ARKit  {dev}')
             self.hdr_arkit.setStyleSheet(_CHIP_ACTIVE)
         else:
-            self.hdr_arkit.setText(f'ARKit  :{ARKIT_PORT}')
+            self.hdr_arkit.setText(f'ARKit :{ARKIT_PORT}')
             self.hdr_arkit.setStyleSheet(_CHIP_NORMAL)
 
         if self.current_frame >= self.total_frames - 1:
@@ -1490,7 +1490,7 @@ class JLVisionV10(QMainWindow):
 
     def _set_speed(self, v):
         self.speed = v
-        self.hdr_speed.setText(f'{v}×')
+        self.hdr_speed.setText(f'{v}x')
         for sv, btn in self._spd_btns.items():
             btn.setChecked(sv == v)
         if self.playing:
