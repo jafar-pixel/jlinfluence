@@ -1,0 +1,3 @@
+# JL Vision Foundation 0.1
+
+New replacement application, staged separately from the existing site. Run `npm install && npm run dev` from `jl-vision/`. Build with `npm run build`. Browser-based MediaPipe pose estimation, 2D knee and hip angles, frame seeking, slow motion, and timestamped coach notes. Notes are local browser storage only; no cloud athlete accounts or AI interpretation yet. Do not assign the production domain before review.
