@@ -1,0 +1,13 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Output of fetch_library.py
+library.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
